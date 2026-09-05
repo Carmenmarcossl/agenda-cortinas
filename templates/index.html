@@ -398,8 +398,14 @@ function openJob(id){
       <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>
       ${t.fase==="instalacion"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}`:""}
     ${t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}
-    ${t.estado==="incidencia"?`<p class="detalle"><b>Incidencia abierta.</b> Sube fotos y, cuando esté resuelta, márcala acabada.</p>
-      <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>`:""}
+    ${t.estado==="incidencia"?`<p class="detalle"><b>Incidencia abierta.</b> Escribe qué pasa y sube fotos. Si pulaste por error, corrígela.</p>
+      <label>Notas de la incidencia</label>
+      <textarea id="notaInc" placeholder="Qué ha pasado, qué falta...">${escapeHtml(t.incidencia_nota||"")}</textarea>
+      <button class="btn btn-primary btn-xl" id="guardarNotaInc">Guardar nota</button>
+      <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>
+      <button class="btn btn-ghost btn-xl" id="cancelarInc">No era incidencia: está terminada</button>`:""}
+    ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
+    ${t.estado==="en_curso"?`<button class="btn btn-ghost btn-xl" id="deshacerStart">Me he equivocado: aún no había empezado</button>`:""}
     <h3 style="margin-top:18px">Fotos y PDF</h3>
     <div class="photos">${fotos.filter(f=>!esPdf(f)).map((f,i)=>`<img src="${f.url}" alt="" data-foto="${i}">`).join("")||""}</div>
     ${listaPdfs(t).map((a,i)=>`<button type="button" class="pdf-btn" data-pdf="${i}">📄 ${escapeHtml(a.nombre||"documento.pdf")}<span>Abrir</span></button>`).join("")}
@@ -426,6 +432,10 @@ function openJob(id){
   const fin=$("#fin"); if(fin) fin.onclick=()=>patch(t.id,{estado:"finalizada"});
   const ai=$("#abrirInc"); if(ai) ai.onclick=()=>patch(t.id,{estado:"incidencia"});
   const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const gn=$("#guardarNotaInc"); if(gn) gn.onclick=()=>patch(t.id,{incidencia_nota:$("#notaInc").value});
+  const df=$("#deshacerFin"); if(df) df.onclick=()=>patch(t.id,{estado:"en_curso"});
+  const ds=$("#deshacerStart"); if(ds) ds.onclick=()=>patch(t.id,{estado:t.cita_fecha?"cita":"asignada"});
   const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar?"))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
   const fm=$("#formMsg"); if(fm) fm.onsubmit=async e=>{e.preventDefault(); await api(`/api/trabajos/${t.id}/mensajes`,{method:"POST",body:{texto:e.target.texto.value}}); await load(); openJob(t.id);};
   $("#formFoto").onsubmit=async e=>{
