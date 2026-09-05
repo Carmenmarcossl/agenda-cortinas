@@ -7,7 +7,9 @@ import json
 import os
 import re
 import secrets
+import smtplib
 import socket
+from email.message import EmailMessage
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -48,8 +50,41 @@ def now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def enviar_correo_cliente(trabajo: dict, que: str) -> str:
+    destino = (trabajo.get("email") or "").strip()
+    if not destino or "@" not in destino:
+        return "sin correo de cliente"
+    user = (os.environ.get("SMTP_USER") or "").strip()
+    password = (os.environ.get("SMTP_PASS") or "").strip()
+    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    port = int(os.environ.get("SMTP_PORT") or "587")
+    origen = (os.environ.get("MAIL_FROM") or user).strip()
+    if not user or not password or not origen:
+        return "falta configurar SMTP_USER y SMTP_PASS en Render"
+    sitio = ", ".join(x for x in [trabajo.get("direccion"), trabajo.get("localidad")] if x)
+    msg = EmailMessage()
+    msg["Subject"] = f"{que.capitalize()} terminada — {trabajo.get('cliente') or 'Agenda Cortinas'}"
+    msg["From"] = origen
+    msg["To"] = destino
+    msg.set_content(
+        f"Hola,\n\n"
+        f"La {que} de {trabajo.get('cliente') or 'su trabajo'} ya está terminada.\n"
+        f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+        f"{('Cliente final: ' + (trabajo.get('cliente_final') or '') + chr(10)) if trabajo.get('cliente_final') else ''}"
+        f"\nUn saludo.\nAgenda Cortinas\n"
+    )
+    try:
+        with smtplib.SMTP(host, port, timeout=20) as smtp:
+            smtp.starttls()
+            smtp.login(user, password)
+            smtp.send_message(msg)
+        return "enviado a " + destino
+    except Exception as err:
+        return "no se pudo enviar: " + str(err)[:160]
+
+
 def empty_db() -> dict:
-    return {"usuarios": [dict(u) for u in SEED_USERS], "trabajos": [], "alertas": [], "push": []}
+    return {"usuarios": [dict(u) for u in SEED_USERS], "trabajos": [], "alertas": [], "push": [], "clientes": []}
 
 
 def load_db() -> dict:
@@ -65,6 +100,7 @@ def load_db() -> dict:
     data.setdefault("trabajos", [])
     data.setdefault("alertas", [])
     data.setdefault("push", [])
+    data.setdefault("clientes", [])
     if not data.get("usuarios"):
         data["usuarios"] = [dict(u) for u in SEED_USERS]
     else:
@@ -83,6 +119,8 @@ def load_db() -> dict:
         t.setdefault("archivos", [])
         t.setdefault("localidad", "")
         t.setdefault("incidencia_nota", "")
+        t.setdefault("email", "")
+        t.setdefault("email_final", "")
     return data
 
 
@@ -199,6 +237,24 @@ def current_user() -> dict:
     }
 
 
+def guardar_cliente(db: dict, nombre: str, email: str = "") -> dict | None:
+    nombre = (nombre or "").strip()
+    email = (email or "").strip()
+    if not nombre:
+        return None
+    lista = db.setdefault("clientes", [])
+    clave = nombre.lower()
+    for c in lista:
+        if (c.get("nombre") or "").strip().lower() == clave:
+            if email:
+                c["email"] = email
+            return c
+    nuevo = {"id": secrets.token_hex(6), "nombre": nombre, "email": email}
+    lista.append(nuevo)
+    lista.sort(key=lambda x: (x.get("nombre") or "").lower())
+    return nuevo
+
+
 def slug_usuario(nombre: str) -> str:
     s = (nombre or "").strip().lower()
     s = s.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
@@ -212,6 +268,8 @@ def nuevo_trabajo(user: dict, body: dict, fase: str = "medidas") -> dict:
         "fase": fase if fase in FASES else "medidas",
         "cliente": (body.get("cliente") or "").strip(),
         "cliente_final": (body.get("cliente_final") or "").strip(),
+        "email": (body.get("email") or "").strip(),
+        "email_final": (body.get("email_final") or "").strip(),
         "telefono": (body.get("telefono") or "").strip(),
         "direccion": (body.get("direccion") or "").strip(),
         "localidad": (body.get("localidad") or "").strip(),
@@ -241,6 +299,8 @@ def crear_instalacion_desde(medidas: dict, user: dict) -> dict:
         {
             "cliente": medidas.get("cliente"),
             "cliente_final": medidas.get("cliente_final"),
+            "email": medidas.get("email"),
+            "email_final": medidas.get("email_final"),
             "telefono": medidas.get("telefono"),
             "direccion": medidas.get("direccion"),
             "localidad": medidas.get("localidad"),
@@ -454,7 +514,41 @@ def api_me():
     if "usuario" not in session:
         return jsonify({"user": None})
     db = load_db()
-    return jsonify({"user": current_user(), "instaladores": [public_user(u) for u in instaladores(db)]})
+    return jsonify({"user": current_user(), "instaladores": [public_user(u) for u in instaladores(db)], "clientes": db.get("clientes") or []})
+
+
+@app.get("/api/clientes")
+@login_required
+def api_clientes():
+    db = load_db()
+    return jsonify({"clientes": db.get("clientes") or []})
+
+
+@app.post("/api/clientes")
+@login_required
+def api_crear_cliente():
+    if current_user()["rol"] != "dueno":
+        return jsonify({"error": "Solo el dueño"}), 403
+    body = request.get_json(silent=True) or {}
+    nombre = (body.get("nombre") or "").strip()
+    email = (body.get("email") or "").strip()
+    if not nombre:
+        return jsonify({"error": "Pon el nombre del cliente"}), 400
+    db = load_db()
+    c = guardar_cliente(db, nombre, email)
+    save_db(db)
+    return jsonify({"cliente": c, "clientes": db.get("clientes") or []})
+
+
+@app.delete("/api/clientes/<cid>")
+@login_required
+def api_borrar_cliente(cid: str):
+    if current_user()["rol"] != "dueno":
+        return jsonify({"error": "Solo el dueño"}), 403
+    db = load_db()
+    db["clientes"] = [c for c in db.get("clientes") or [] if c.get("id") != cid]
+    save_db(db)
+    return jsonify({"ok": True, "clientes": db.get("clientes") or []})
 
 
 @app.get("/api/usuarios")
@@ -548,6 +642,7 @@ def api_listar():
             "alertas": alertas_de(db, user),
             "user": user,
             "instaladores": [public_user(u) for u in instaladores(db)],
+            "clientes": db.get("clientes") or [],
         }
     )
 
@@ -582,6 +677,7 @@ def api_crear():
                 return jsonify({"error": str(err)}), 400
     if inst and inst["rol"] == "instalador":
         asignar(trabajo, inst, user, db, "toma de medidas" if trabajo["fase"] == "medidas" else "instalación")
+    guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
     db["trabajos"].append(trabajo)
     save_db(db)
     return jsonify({"trabajo": trabajo})
@@ -661,6 +757,8 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=trabajo["id"],
                     tipo="finalizada",
                 )
+                aviso = enviar_correo_cliente(trabajo, fase_txt)
+                add_msg(trabajo, user, "Correo al cliente: " + aviso)
             if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
                 inst_job = crear_instalacion_desde(trabajo, user)
                 trabajo["relacionado_id"] = inst_job["id"]
@@ -681,7 +779,7 @@ def api_actualizar(trabajo_id: str):
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "telefono", "direccion", "localidad", "tipo", "medidas"):
+    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email_final", "telefono", "direccion", "localidad", "tipo", "medidas"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
         elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota"):
