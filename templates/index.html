@@ -136,6 +136,7 @@ function filtered(){
     if(state.fase!=="todas" && t.fase!==state.fase) return false;
     if(state.filtro==="activos") return t.estado!=="finalizada";
     if(state.filtro==="todos") return true;
+    if(state.filtro==="finalizada") return t.estado==="finalizada" || t.estado==="incidencia";
     return t.estado===state.filtro;
   });
 }
@@ -202,8 +203,10 @@ function renderInstalador(){
   const main=$("#main");
   if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
   const lista=filtered();
+  const incs=state.trabajos.filter(t=>t.estado==="incidencia");
   main.innerHTML=`
     ${chipsFiltro()}
+    ${incs.length?`<div class="card" style="padding:14px;margin-bottom:12px"><b>${incs.length} incidencia${incs.length>1?"s":""} abierta${incs.length>1?"s":""}</b><div class="meta">Es la misma instalación, con los mismos datos. Pulsa para ver fotos y cerrarla.</div></div>`:""}
     ${lista.map(t=>jobCard(t,true)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Prueba otro filtro.</p></div>`}`;
   bindFiltros();
 }
@@ -230,9 +233,10 @@ function renderDueno(){
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
   const main=$("#main");
   if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
+  const incs=state.trabajos.filter(t=>t.estado==="incidencia");
   main.innerHTML=`
     ${chipsFiltro()}
-    <div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div>
+    ${incs.length?`<div class="card" style="padding:14px;margin-bottom:12px"><b>${incs.length} incidencia${incs.length>1?"s":""} abierta${incs.length>1?"s":""}</b><div class="meta">Sigue siendo la misma instalación (cliente, dirección, fotos). No está cerrada del todo.</div></div>`:""}
     ${filtered().map(t=>jobCard(t,false)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Pulsa + para crear una toma de medidas.</p></div>`}`;
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
   document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
@@ -242,7 +246,7 @@ function renderDueno(){
 function jobCard(t,big){
   return `<article class="card job ${big?"big":""}" data-id="${t.id}">
     <div style="display:flex;justify-content:space-between;gap:8px"><div>
-      <span class="fase">${FASES[t.fase]}</span><h3>${escapeHtml(t.cliente)}</h3>
+      <span class="fase">${FASES[t.fase]}</span>${t.estado==="incidencia"?`<span class="badge s-incidencia">Incidencia</span>`:""}<h3>${escapeHtml(t.cliente)}</h3>
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
       <div class="meta">${escapeHtml([t.direccion,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
       <div class="meta">${fmtCita(t)}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</div>
@@ -391,7 +395,8 @@ function openJob(id){
         <button class="btn btn-primary btn-xl" id="guardarCita">Guardar cita</button>
       </div>
       ${t.estado!=="nueva"?`<button class="btn btn-sage btn-xl" id="empezar">Marcar EMPEZADA</button>`:""}
-      <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>`:""}
+      <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>
+      ${t.fase==="instalacion"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}`:""}
     ${t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}
     ${t.estado==="incidencia"?`<p class="detalle"><b>Incidencia abierta.</b> Sube fotos y, cuando esté resuelta, márcala acabada.</p>
       <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>`:""}
@@ -419,7 +424,7 @@ function openJob(id){
   const gc=$("#guardarCita"); if(gc) gc.onclick=()=>patch(t.id,{concertar_cita:true,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
   const em=$("#empezar"); if(em) em.onclick=()=>patch(t.id,{estado:"en_curso"});
   const fin=$("#fin"); if(fin) fin.onclick=()=>patch(t.id,{estado:"finalizada"});
-  const ai=$("#abrirInc"); if(ai) ai.onclick=()=>{if(!confirm("¿Abrir incidencia? El trabajo dejará de estar terminado.")) return; patch(t.id,{estado:"incidencia"});};
+  const ai=$("#abrirInc"); if(ai) ai.onclick=()=>patch(t.id,{estado:"incidencia"});
   const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>patch(t.id,{estado:"finalizada"});
   const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar?"))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
   const fm=$("#formMsg"); if(fm) fm.onsubmit=async e=>{e.preventDefault(); await api(`/api/trabajos/${t.id}/mensajes`,{method:"POST",body:{texto:e.target.texto.value}}); await load(); openJob(t.id);};
