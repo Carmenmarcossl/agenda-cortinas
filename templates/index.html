@@ -113,7 +113,7 @@
 const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",incidencia:"Incidencia",finalizada:"Terminada"};
 const FASES = {medidas:"Medir",instalacion:"Instalar"};
 const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-const state = {user:null,trabajos:[],alertas:[],instaladores:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
+const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
 const $ = (s,el=document)=>el.querySelector(s);
 function monday(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
 function ymd(d){const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");}
@@ -214,7 +214,7 @@ function renderInstalador(){
 function renderDueno(){
   const c={pend:0,cita:0,curso:0,fin:0};
   state.trabajos.forEach(t=>{ if(t.estado==="finalizada")c.fin++; else if(t.estado==="en_curso")c.curso++; else if(t.estado==="cita")c.cita++; else c.pend++; });
-  $("#app").innerHTML=`${header(`<button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
+  $("#app").innerHTML=`${header(`<button class="btn btn-ghost" id="btnCli">Clientes</button><button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
     ${state.enlaces && state.enlaces.length ? `<div class="card" style="padding:12px 14px;margin-bottom:12px"><b>En el iPhone:</b> misma Wi‑Fi que el Mac y abre Safari en<br>${state.enlaces.map(e=>`<code style="font-size:16px">${e}</code>`).join("<br>")}<br><span class="meta">Luego: Compartir → Añadir a pantalla de inicio.</span></div>` : ""}
     <div class="stats">
       <div class="card stat"><b>${c.pend}</b><span>Por enviar / citar</span></div>
@@ -229,7 +229,7 @@ function renderDueno(){
     <div id="main"></div>
     <button class="fab" id="fab">+</button>
     <dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
-  bindCommon(); $("#btnEq").onclick=openEquipo; $("#fab").onclick=openNuevo;
+  bindCommon(); $("#btnEq").onclick=openEquipo; $("#btnCli").onclick=openClientes; $("#fab").onclick=openNuevo;
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
   const main=$("#main");
   if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
@@ -283,8 +283,12 @@ function openNuevo(){
   const dlg=$("#dlg");
   dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
     <label>Qué hay que hacer</label><select name="fase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option></select>
-    <label>Cliente</label><input name="cliente" required placeholder="Quién te encarga el trabajo">
+    <label>Cliente</label>
+    <select id="selCliente"><option value="">Nuevo cliente…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}${c.email?" — "+escapeHtml(c.email):""}</option>`).join("")}</select>
+    <input name="cliente" id="inCliente" required placeholder="Quién te encarga el trabajo">
+    <label>Email del cliente</label><input name="email" id="inEmail" type="email" placeholder="correo@cliente.com">
     <label>Cliente final</label><input name="cliente_final" placeholder="Quién vive en la casa / destinatario">
+    <label>Email del cliente final</label><input name="email_final" type="email" placeholder="correo@casa.com">
     <div class="row"><div><label>Teléfono</label><input name="telefono" type="tel"></div><div><label>Tipo</label><input name="tipo"></div></div>
     <label>Dirección</label><input name="direccion" placeholder="Calle y número">
     <label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad">
@@ -295,6 +299,12 @@ function openNuevo(){
     <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
     <div class="error" id="errN"></div></form>`;
   dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
+  const sel=$("#selCliente"); const inC=$("#inCliente"); const inE=$("#inEmail");
+  if(sel) sel.onchange=()=>{
+    const o=sel.selectedOptions[0];
+    if(!o || !o.value){ inC.value=""; inE.value=""; inC.readOnly=false; return; }
+    inC.value=o.dataset.nombre||""; inE.value=o.dataset.email||""; inC.readOnly=true;
+  };
   $("#formNuevo").onsubmit=async e=>{
     e.preventDefault();
     try{
@@ -304,6 +314,37 @@ function openNuevo(){
   };
 }
 
+function openClientes(){
+  const dlg=$("#dlg");
+  const list=state.clientes||[];
+  dlg.innerHTML=`<div class="sheet"><h2>Clientes</h2>
+    <p class="meta">Solo nombre y correo. Luego salen en el desplegable al crear un trabajo.</p>
+    <form id="formCli">
+      <label>Nombre</label><input name="nombre" required placeholder="Pepito Pérez">
+      <label>Email</label><input name="email" type="email" placeholder="correo@cliente.com">
+      <button class="btn btn-primary btn-xl" type="submit">Guardar cliente</button>
+      <div class="error" id="errCli"></div>
+    </form>
+    <div style="margin-top:14px">${list.length?list.map(c=>`<div class="alert-item" style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+      <div><b>${escapeHtml(c.nombre)}</b><div class="meta">${escapeHtml(c.email||"Sin correo")}</div></div>
+      <button class="btn btn-ghost" data-del="${c.id}" type="button">Quitar</button>
+    </div>`).join(""):`<p class="meta">Aún no hay fichas.</p>`}</div>
+    <button class="btn btn-ghost btn-xl" id="cerrarCli">Cerrar</button></div>`;
+  dlg.showModal();
+  $("#cerrarCli").onclick=()=>dlg.close();
+  $("#formCli").onsubmit=async e=>{
+    e.preventDefault();
+    try{
+      const data=await api("/api/clientes",{method:"POST",body:Object.fromEntries(new FormData(e.target))});
+      state.clientes=data.clientes||[]; openClientes();
+    }catch(err){$("#errCli").textContent=err.message;}
+  };
+  dlg.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("¿Quitar este cliente de la lista?")) return;
+    const data=await api("/api/clientes/"+b.dataset.del,{method:"DELETE"});
+    state.clientes=data.clientes||[]; openClientes();
+  });
+}
 function openEquipo(){
   const dlg=$("#dlg"); const list=state.instaladores||[];
   const yo=state.user||{};
@@ -377,6 +418,8 @@ function openJob(id){
     <span class="fase">${FASES[t.fase]}</span>
     <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
     ${t.cliente_final?`<p class="meta">Cliente final: <b>${escapeHtml(t.cliente_final)}</b></p>`:""}
+    ${t.email?`<p class="meta">Email cliente: <a href="mailto:${escapeHtml(t.email)}">${escapeHtml(t.email)}</a></p>`:""}
+    ${t.email_final?`<p class="meta">Email cliente final: <a href="mailto:${escapeHtml(t.email_final)}">${escapeHtml(t.email_final)}</a></p>`:""}
     <p class="meta">${escapeHtml(sitio||"")}</p>
     <p class="meta">Día: <b>${fmtCita(t)}</b>${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</p>
     ${t.tipo?`<p class="detalle"><b>Tipo:</b> ${escapeHtml(t.tipo)}</p>`:""}
@@ -530,7 +573,7 @@ function avisar(prev){(state.alertas||[]).filter(a=>!a.leida && !prev.has(a.id))
 async function load(){
   const prev=new Set((state.alertas||[]).map(a=>a.id));
   const data=await api("/api/trabajos");
-  state.trabajos=data.trabajos; state.alertas=data.alertas||[]; state.user=data.user; state.instaladores=data.instaladores||[];
+  state.trabajos=data.trabajos; state.alertas=data.alertas||[]; state.user=data.user; state.instaladores=data.instaladores||[]; state.clientes=data.clientes||state.clientes||[];
   try { const red = await api("/api/red"); state.enlaces = red.enlaces || []; } catch {}
   ponerBadge(unread().length);
   avisar(prev); render();
