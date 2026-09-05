@@ -39,9 +39,9 @@ SEED_USERS = [
     {"usuario": "juan", "password": "juan123", "nombre": "Juan", "rol": "instalador"},
 ]
 
-STATUSES = ["nueva", "asignada", "cita", "en_curso", "finalizada"]
+STATUSES = ["nueva", "asignada", "cita", "en_curso", "incidencia", "finalizada"]
 FASES = ["medidas", "instalacion"]
-FOTO_MOMENTOS = ["general", "medidas", "inicio", "fin"]
+FOTO_MOMENTOS = ["general", "medidas", "inicio", "fin", "incidencia"]
 
 
 def now_iso() -> str:
@@ -622,16 +622,45 @@ def api_actualizar(trabajo_id: str):
                 trabajo_id=trabajo["id"],
                 tipo="empezada",
             )
-        if nuevo == "finalizada" and anterior != "finalizada":
-            add_msg(trabajo, user, f"Finalizado ({fase_txt}).")
+        if nuevo == "incidencia" and anterior != "incidencia":
+            if trabajo.get("fase") != "instalacion":
+                return jsonify({"error": "La incidencia solo es para instalaciones"}), 400
+            add_msg(trabajo, user, "Incidencia abierta. El trabajo sigue pendiente.")
             add_alerta(
                 db,
                 para="dueno",
-                texto=f"{user['nombre']} ha terminado la {fase_txt} de {trabajo['cliente']}.",
+                texto=f"Incidencia en la instalación de {trabajo['cliente']}.",
                 trabajo_id=trabajo["id"],
-                tipo="finalizada",
+                tipo="incidencia",
             )
-            if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id"):
+            if trabajo.get("asignado_a") and user["usuario"] != trabajo.get("asignado_a"):
+                add_alerta(
+                    db,
+                    para=trabajo["asignado_a"],
+                    texto=f"Hay una incidencia en {trabajo['cliente']}.",
+                    trabajo_id=trabajo["id"],
+                    tipo="incidencia",
+                )
+        if nuevo == "finalizada" and anterior != "finalizada":
+            if anterior == "incidencia":
+                add_msg(trabajo, user, "Incidencia acabada. Instalación terminada.")
+                add_alerta(
+                    db,
+                    para="dueno",
+                    texto=f"{user['nombre']} ha cerrado la incidencia de {trabajo['cliente']}.",
+                    trabajo_id=trabajo["id"],
+                    tipo="incidencia_cerrada",
+                )
+            else:
+                add_msg(trabajo, user, f"Finalizado ({fase_txt}).")
+                add_alerta(
+                    db,
+                    para="dueno",
+                    texto=f"{user['nombre']} ha terminado la {fase_txt} de {trabajo['cliente']}.",
+                    trabajo_id=trabajo["id"],
+                    tipo="finalizada",
+                )
+            if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
                 inst_job = crear_instalacion_desde(trabajo, user)
                 trabajo["relacionado_id"] = inst_job["id"]
                 inst_job["relacionado_id"] = trabajo["id"]
