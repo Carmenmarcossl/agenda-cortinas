@@ -86,6 +86,13 @@
     .fab{position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:0;background:var(--terr);color:#fff;font-size:32px;box-shadow:0 10px 24px rgba(154,63,22,.35)}
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 16px;border-radius:14px;z-index:50;max-width:92%}
     .alert-item{padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+    .pdf-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:8px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;font-weight:700;cursor:pointer;text-align:left}
+    #visorPdf{max-width:none;width:100%;height:100%;padding:0}
+    #visorPdf::backdrop{background:rgba(20,12,8,.72)}
+    .visor-box{background:#1b140f;color:#fff;min-height:100dvh;display:flex;flex-direction:column}
+    .visor-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));background:#2a1d14;position:sticky;top:0;z-index:2}
+    .visor-bar strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .visor-box iframe,.visor-box embed{flex:1;width:100%;border:0;background:#fff;min-height:70vh}
     @media(max-width:800px){
       .stats{grid-template-columns:repeat(2,1fr)}
       .row{grid-template-columns:1fr}
@@ -177,7 +184,7 @@ function renderInstalador(){
       <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Mis trabajos</button>
       <button class="btn btn-ghost ${state.vista==="semana"?"on":""}" data-v="semana">Semana</button>
     </div>
-    <div id="main"></div><dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog>`;
+    <div id="main"></div><dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
   bindCommon();
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
   const main=$("#main");
@@ -207,7 +214,7 @@ function renderDueno(){
     </div>
     <div id="main"></div>
     <button class="fab" id="fab">+</button>
-    <dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog>`;
+    <dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
   bindCommon(); $("#btnEq").onclick=openEquipo; $("#fab").onclick=openNuevo;
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
   const main=$("#main");
@@ -374,9 +381,9 @@ function openJob(id){
       ${t.estado!=="nueva"?`<button class="btn btn-sage btn-xl" id="empezar">Marcar EMPEZADA</button>`:""}
       <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>`:""}
     <h3 style="margin-top:18px">Fotos y PDF</h3>
-    <div class="photos">${fotos.map(f=>`<img src="${f.url}" alt="">`).join("")||""}</div>
-    ${(t.archivos||[]).filter(a=>a.tipo==="pdf").map(a=>`<p><a href="${a.url}" target="_blank">PDF: ${escapeHtml(a.nombre||"documento.pdf")}</a></p>`).join("")}
-    ${!(fotos.length||(t.archivos||[]).length)?`<p class="meta">Sin archivos</p>`:""}
+    <div class="photos">${fotos.filter(f=>!esPdf(f)).map(f=>`<img src="${f.url}" alt="">`).join("")||""}</div>
+    ${listaPdfs(t).map((a,i)=>`<button type="button" class="pdf-btn" data-pdf="${i}">📄 ${escapeHtml(a.nombre||"documento.pdf")}<span>Abrir</span></button>`).join("")}
+    ${!(fotos.filter(f=>!esPdf(f)).length||listaPdfs(t).length)?`<p class="meta">Sin archivos</p>`:""}
     <form id="formFoto">
       <label>Añadir foto o PDF</label>
       <select name="momento">${t.fase==="instalacion"?`<option value="inicio">Del empezado</option><option value="fin">Del acabado</option><option value="general">Otro</option>`:`<option value="medidas">De las medidas</option><option value="general">Otro</option>`}</select>
@@ -401,9 +408,48 @@ function openJob(id){
   const fm=$("#formMsg"); if(fm) fm.onsubmit=async e=>{e.preventDefault(); await api(`/api/trabajos/${t.id}/mensajes`,{method:"POST",body:{texto:e.target.texto.value}}); await load(); openJob(t.id);};
   $("#formFoto").onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target);
-    if(!fd.get("foto")||!fd.get("foto").size){$("#errF").textContent="Elige una foto"; return;}
+    if(!fd.get("foto")||!fd.get("foto").size){$("#errF").textContent="Elige una foto o un PDF"; return;}
     try{await api(`/api/trabajos/${t.id}/fotos`,{method:"POST",form:true,body:fd}); await load(); openJob(t.id);}catch(err){$("#errF").textContent=err.message;}
   };
+  const pdfs=listaPdfs(t);
+  dlg.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    abrirPdf(pdfs[Number(b.dataset.pdf)]);
+  });
+}
+
+function esPdf(f){
+  const n=(f.nombre||f.name||f.url||"").toLowerCase();
+  const t=(f.tipo||f.mime||"").toLowerCase();
+  return t==="pdf" || t.includes("pdf") || n.endsWith(".pdf");
+}
+function listaPdfs(t){
+  const deArchivos=(t.archivos||[]).filter(esPdf);
+  const deFotos=(t.fotos||[]).filter(esPdf);
+  const seen=new Set();
+  return [...deArchivos,...deFotos].filter(a=>{
+    const k=a.url||a.nombre; if(seen.has(k)) return false; seen.add(k); return true;
+  });
+}
+function abrirPdf(a){
+  if(!a||!a.url) return;
+  let visor=$("#visorPdf");
+  if(!visor){
+    visor=document.createElement("dialog");
+    visor.id="visorPdf";
+    document.body.appendChild(visor);
+  }
+  visor.innerHTML=`<div class="visor-box">
+    <div class="visor-bar">
+      <strong>${escapeHtml(a.nombre||"documento.pdf")}</strong>
+      <button class="btn btn-primary" type="button" id="cerrarPdf">Cerrar</button>
+    </div>
+    <iframe src="${escapeHtml(a.url)}" title="PDF"></iframe>
+  </div>`;
+  visor.showModal();
+  const cerrar=()=>{visor.close(); visor.innerHTML="";};
+  $("#cerrarPdf").onclick=cerrar;
+  visor.addEventListener("cancel", e=>{e.preventDefault(); cerrar();},{once:true});
 }
 
 async function patch(id,body){
