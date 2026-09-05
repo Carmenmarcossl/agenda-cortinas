@@ -176,11 +176,16 @@ function bindCommon(){
   $("#btnBell").onclick=openAlertas;
 }
 
+function chipsFiltro(){
+  return `<div class="chips">${[["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["finalizada","Terminadas"],["todos","Todo"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div>
+    <div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div>`;
+}
+function bindFiltros(){
+  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
+  document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
+  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+}
 function renderInstalador(){
-  const pendientes=state.trabajos.filter(t=>t.estado==="asignada"||t.estado==="cita");
-  const semana=citasSemana().filter(t=>t.estado!=="finalizada");
-  const enCurso=state.trabajos.filter(t=>t.estado==="en_curso");
-  const hechas=state.trabajos.filter(t=>t.estado==="finalizada");
   $("#app").innerHTML=`${header()}
     <div class="tabs">
       <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Mis trabajos</button>
@@ -191,14 +196,11 @@ function renderInstalador(){
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
   const main=$("#main");
   if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
+  const lista=filtered();
   main.innerHTML=`
-    ${pendientes.length?`<h2 style="margin:8px 0">Pendientes</h2>${pendientes.map(t=>jobCard(t,true)).join("")}`:""}
-    ${enCurso.length?`<h2 style="margin:16px 0 8px">En marcha</h2>${enCurso.map(t=>jobCard(t,true)).join("")}`:""}
-    <h2 style="margin:16px 0 8px">Citas de esta semana</h2>
-    ${semana.length?semana.map(t=>jobCard(t,true)).join(""):`<div class="card empty">No hay citas esta semana.</div>`}
-    <h2 style="margin:16px 0 8px">Terminadas</h2>
-    ${hechas.length?hechas.map(t=>jobCard(t,true)).join(""):`<div class="card empty">Aún no hay trabajos terminados.</div>`}`;
-  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+    ${chipsFiltro()}
+    ${lista.map(t=>jobCard(t,true)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Prueba otro filtro.</p></div>`}`;
+  bindFiltros();
 }
 
 function renderDueno(){
