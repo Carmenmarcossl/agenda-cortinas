@@ -82,6 +82,7 @@ def load_db() -> dict:
         t.setdefault("cliente_final", "")
         t.setdefault("archivos", [])
         t.setdefault("localidad", "")
+        t.setdefault("incidencia_nota", "")
     return data
 
 
@@ -674,6 +675,11 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=inst_job["id"],
                     tipo="instalacion_lista",
                 )
+
+    if "incidencia_nota" in body:
+        trabajo["incidencia_nota"] = (body.get("incidencia_nota") or "").strip()
+        if trabajo["incidencia_nota"]:
+            add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
     for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "telefono", "direccion", "localidad", "tipo", "medidas"):
         if field in body and user["rol"] == "dueno":
