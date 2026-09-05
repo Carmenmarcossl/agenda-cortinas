@@ -233,6 +233,450 @@ function jobCard(t,big){
     <div style="display:flex;justify-content:space-between;gap:8px"><div>
       <span class="fase">${FASES[t.fase]}</span><h3>${escapeHtml(t.cliente)}</h3>
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
+      <div class="meta">${escapeHtml([t.direccion,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
+      <div class="meta">${fmtCita(t)}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</div>
+    </div><span class="badge s-${t.estado}">${ESTADOS[t.estado]}</span></div></article>`;
+}
+function citasSemana(){
+  const start=ymd(state.weekStart), end=ymd(addDays(state.weekStart,6));
+  return state.trabajos.filter(t=>t.cita_fecha && t.cita_fecha>=start && t.cita_fecha<=end)
+    .sort((a,b)=>(a.cita_fecha+a.cita_hora).localeCompare(b.cita_fecha+b.cita_hora));
+}
+function weekHTML(){
+  const today=ymd(new Date()); const start=state.weekStart; const fin=addDays(start,6);
+  const cols=[];
+  for(let i=0;i<7;i++){
+    const d=addDays(start,i); const key=ymd(d);
+    const items=state.trabajos.filter(t=>t.cita_fecha===key).sort((a,b)=>(a.cita_hora||"").localeCompare(b.cita_hora||""));
+    cols.push(`<div class="day ${key===today?"today":""}"><h4>${DIAS[i]} ${d.getDate()}</h4>
+      ${items.map(t=>`<button class="pill ${t.fase==="instalacion"?"inst":""}" data-id="${t.id}">${t.cita_hora||""} ${escapeHtml(t.cliente)} · ${FASES[t.fase]}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</button>`).join("") || `<span class="meta">Libre</span>`}</div>`);
+  }
+  return `<div class="weekbar"><button class="btn btn-ghost" id="prevS">←</button><strong>${start.getDate()}/${start.getMonth()+1} — ${fin.getDate()}/${fin.getMonth()+1}</strong>
+    <button class="btn btn-ghost" id="hoyS">Esta semana</button><button class="btn btn-ghost" id="nextS">→</button></div><div class="week">${cols.join("")}</div>`;
+}
+function bindWeek(){
+  $("#prevS").onclick=()=>{state.weekStart=addDays(state.weekStart,-7); render();};
+  $("#nextS").onclick=()=>{state.weekStart=addDays(state.weekStart,7); render();};
+  $("#hoyS").onclick=()=>{state.weekStart=monday(new Date()); render();};
+  document.querySelectorAll(".pill").forEach(b=>b.onclick=()=>openJob(b.dataset.id));
+}
+function instOptions(selected=""){
+  return `<option value="">Elegir instalador…</option>`+(state.instaladores||[]).map(u=>`<option value="${u.usuario}" ${u.usuario===selected?"selected":""}>${escapeHtml(u.nombre)}</option>`).join("");
+}
+
+function openNuevo(){
+  const dlg=$("#dlg");
+  dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
+    <label>Qué hay que hacer</label><select name="fase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option></select>
+    <label>Cliente</label><input name="cliente" required placeholder="Quién te encarga el trabajo">
+    <label>Cliente final</label><input name="cliente_final" placeholder="Quién vive en la casa / destinatario">
+    <div class="row"><div><label>Teléfono</label><input name="telefono" type="tel"></div><div><label>Tipo</label><input name="tipo"></div></div>
+    <label>Dirección</label><input name="direccion" placeholder="Calle y número">
+    <label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad">
+    <label>Medidas</label><textarea name="medidas"></textarea>
+    <label>Foto o PDF</label>
+    <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
+    <label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>
+    <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
+    <div class="error" id="errN"></div></form>`;
+  dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
+  $("#formNuevo").onsubmit=async e=>{
+    e.preventDefault();
+    try{
+      await api("/api/trabajos",{method:"POST", form:true, body:new FormData(e.target)});
+      dlg.close(); await load();
+    }catch(err){$("#errN").textContent=err.message;}
+  };
+}
+
+function openEquipo(){
+  const dlg=$("#dlg"); const list=state.instaladores||[];
+  const yo=state.user||{};
+  dlg.innerHTML=`<div class="sheet"><h2>Equipo y cuenta</h2>
+    <h3>Tu nombre de dueño</h3>
+    <form id="formYo">
+      <label>Cómo quieres que se te vea</label>
+      <input name="nombre" required value="${escapeHtml(yo.nombre||"Dueño")}">
+      <label>Nueva contraseña tuya (déjala vacía si no la cambias)</label>
+      <input name="password" placeholder="Mínimo 4 caracteres">
+      <button class="btn btn-primary btn-full" style="margin-top:12px" type="submit">Guardar mi cuenta</button>
+      <div class="error" id="errYo"></div>
+    </form>
+    <h3 style="margin-top:22px">Instaladores</h3>
+    ${list.map(u=>`<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div><b>${escapeHtml(u.nombre)}</b><div class="meta">Usuario: ${escapeHtml(u.usuario)}</div></div>
+        <button class="btn btn-danger" data-del="${u.usuario}">Quitar</button>
+      </div>
+      <form data-pass="${u.usuario}" style="margin-top:8px">
+        <label>Nueva contraseña</label>
+        <div class="row"><input name="password" required placeholder="Nueva clave"><button class="btn btn-ghost" type="submit">Cambiar</button></div>
+      </form>
+    </div>`).join("")||`<p class="meta">Todavía no hay instaladores.</p>`}
+    <form id="formInst" style="margin-top:16px">
+      <label>Nombre del instalador</label><input name="nombre" required placeholder="Ej. Juan">
+      <label>Contraseña sencilla</label><input name="password" required placeholder="Ej. juan123">
+      <button class="btn btn-primary btn-full" style="margin-top:12px" type="submit">Añadir instalador</button>
+      <div class="error" id="errE"></div></form>
+    <button class="btn btn-ghost btn-full" style="margin-top:10px" id="cerrarE">Cerrar</button></div>`;
+  dlg.showModal(); $("#cerrarE").onclick=()=>dlg.close();
+  $("#formYo").onsubmit=async e=>{
+    e.preventDefault();
+    const fd=Object.fromEntries(new FormData(e.target));
+    try{await api("/api/usuarios/"+yo.usuario,{method:"PATCH",body:fd}); await load(); openEquipo(); alert("Cuenta actualizada");}
+    catch(err){$("#errYo").textContent=err.message;}
+  };
+  $("#formInst").onsubmit=async e=>{
+    e.preventDefault();
+    try{const r=await api("/api/usuarios",{method:"POST",body:Object.fromEntries(new FormData(e.target))}); alert("Creado.\nUsuario: "+r.usuario.usuario+"\nContraseña: "+r.usuario.password); await load(); openEquipo();}
+    catch(err){$("#errE").textContent=err.message;}
+  };
+  dlg.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("¿Quitar a este instalador?"))return;
+    try{await api("/api/usuarios/"+b.dataset.del,{method:"DELETE"}); await load(); openEquipo();}
+    catch(err){alert(err.message);}
+  });
+  dlg.querySelectorAll("[data-pass]").forEach(f=>f.onsubmit=async e=>{
+    e.preventDefault();
+    const clave=e.target.password.value;
+    try{await api("/api/usuarios/"+f.dataset.pass,{method:"PATCH",body:{password:clave}}); alert("Contraseña cambiada"); e.target.reset(); await load(); openEquipo();}
+    catch(err){alert(err.message);}
+  });
+}
+
+function openAlertas(){
+  const dlg=$("#dlgAlertas"); const items=state.alertas||[];
+  dlg.innerHTML=`<div class="sheet"><h2>Avisos</h2>
+    ${items.length?items.map(a=>`<div class="alert-item" data-id="${a.id}" data-tid="${a.trabajo_id}">${escapeHtml(a.texto)}<div class="meta">${fmtFecha(a.fecha)}</div></div>`).join(""):`<p class="meta">No hay avisos.</p>`}
+    <div class="actions"><button class="btn btn-ghost" id="leerTodas">Ya los he visto</button><button class="btn btn-ghost" id="cerrarA">Cerrar</button></div></div>`;
+  dlg.showModal(); $("#cerrarA").onclick=()=>dlg.close();
+  $("#leerTodas").onclick=async()=>{await api("/api/alertas/leer",{method:"POST",body:{}}); await load(); openAlertas();};
+  dlg.querySelectorAll(".alert-item").forEach(el=>el.onclick=async()=>{ await api("/api/alertas/leer",{method:"POST",body:{id:el.dataset.id}}); dlg.close(); if(el.dataset.tid) openJob(el.dataset.tid); await load(); });
+}
+
+function openJob(id){
+  const t=state.trabajos.find(x=>x.id===id); if(!t) return; state.sel=id;
+  const dlg=$("#dlg"); const sitio=[t.direccion,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
+  const simple=esInst(); const fotos=t.fotos||[];
+  dlg.innerHTML=`<div class="sheet">
+    <span class="fase">${FASES[t.fase]}</span>
+    <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
+    ${t.cliente_final?`<p class="meta">Cliente final: <b>${escapeHtml(t.cliente_final)}</b></p>`:""}
+    <p class="meta">${escapeHtml(sitio||"")}</p>
+    <p class="meta">Día: <b>${fmtCita(t)}</b>${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</p>
+    ${t.tipo?`<p class="detalle"><b>Tipo:</b> ${escapeHtml(t.tipo)}</p>`:""}
+    ${t.medidas?`<p class="detalle"><b>Medidas:</b> ${escapeHtml(t.medidas)}</p>`:""}
+    <div class="stack">
+      ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar al cliente</a>`:""}
+      ${maps?`<a class="btn btn-ghost btn-xl" href="${maps}" target="_blank" rel="noopener">Ver en el mapa</a>`:""}
+    </div>
+    ${!simple && t.estado!=="finalizada"?`<label>Mandar a</label><select id="selInst">${instOptions(t.asignado_a||"")}</select>
+      <button class="btn btn-primary btn-xl" id="enviar">Enviar a este instalador</button>`:""}
+    ${t.estado!=="finalizada"?`<button class="btn btn-ghost btn-xl" id="cita">Poner día y hora</button>
+      <div id="citaBox" hidden>
+        <label>Día</label><input type="date" id="citaFecha" value="${t.cita_fecha||""}">
+        <label>Hora</label><input type="time" id="citaHora" value="${t.cita_hora||""}">
+        <label>Nota</label><input id="citaNota" value="${escapeHtml(t.cita_nota||"")}">
+        <button class="btn btn-primary btn-xl" id="guardarCita">Guardar cita</button>
+      </div>
+      ${t.estado!=="nueva"?`<button class="btn btn-sage btn-xl" id="empezar">Marcar EMPEZADA</button>`:""}
+      <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>`:""}
+    <h3 style="margin-top:18px">Fotos y PDF</h3>
+    <div class="photos">${fotos.filter(f=>!esPdf(f)).map(f=>`<img src="${f.url}" alt="">`).join("")||""}</div>
+    ${listaPdfs(t).map((a,i)=>`<button type="button" class="pdf-btn" data-pdf="${i}">📄 ${escapeHtml(a.nombre||"documento.pdf")}<span>Abrir</span></button>`).join("")}
+    ${!(fotos.filter(f=>!esPdf(f)).length||listaPdfs(t).length)?`<p class="meta">Sin archivos</p>`:""}
+    <form id="formFoto">
+      <label>Añadir foto o PDF</label>
+      <select name="momento">${t.fase==="instalacion"?`<option value="inicio">Del empezado</option><option value="fin">Del acabado</option><option value="general">Otro</option>`:`<option value="medidas">De las medidas</option><option value="general">Otro</option>`}</select>
+      <input type="file" name="foto" accept="image/*,.pdf,application/pdf" style="margin-top:8px">
+      <button class="btn btn-primary btn-xl" type="submit">Subir archivo</button>
+      <div class="error" id="errF"></div>
+    </form>
+    ${simple?"":`<h3 style="margin-top:18px">Notas</h3>
+      <div class="msgs">${(t.mensajes||[]).map(m=>`<div class="msg ${m.rol}"><div class="meta">${escapeHtml(m.autor)} · ${fmtFecha(m.fecha)}</div>${escapeHtml(m.texto)}</div>`).join("")}</div>
+      <form id="formMsg" class="actions"><input name="texto" required placeholder="Nota"><button class="btn btn-primary" type="submit">Enviar</button></form>
+      <button class="btn btn-danger btn-xl" id="borrar">Borrar trabajo</button>`}
+    <button class="btn btn-ghost btn-xl" id="cerrar">Cerrar</button>
+  </div>`;
+  dlg.showModal();
+  $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+  const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
+  const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
+  const gc=$("#guardarCita"); if(gc) gc.onclick=()=>patch(t.id,{concertar_cita:true,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
+  const em=$("#empezar"); if(em) em.onclick=()=>patch(t.id,{estado:"en_curso"});
+  const fin=$("#fin"); if(fin) fin.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar?"))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
+  const fm=$("#formMsg"); if(fm) fm.onsubmit=async e=>{e.preventDefault(); await api(`/api/trabajos/${t.id}/mensajes`,{method:"POST",body:{texto:e.target.texto.value}}); await load(); openJob(t.id);};
+  $("#formFoto").onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target);
+    if(!fd.get("foto")||!fd.get("foto").size){$("#errF").textContent="Elige una foto o un PDF"; return;}
+    try{await api(`/api/trabajos/${t.id}/fotos`,{method:"POST",form:true,body:fd}); await load(); openJob(t.id);}catch(err){$("#errF").textContent=err.message;}
+  };
+  const pdfs=listaPdfs(t);
+  dlg.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    abrirPdf(pdfs[Number(b.dataset.pdf)]);
+  });
+}
+
+function esPdf(f){
+  const n=(f.nombre||f.name||f.url||"").toLowerCase();
+  const t=(f.tipo||f.mime||"").toLowerCase();
+  return t==="pdf" || t.includes("pdf") || n.endsWith(".pdf");
+}
+function listaPdfs(t){
+  const deArchivos=(t.archivos||[]).filter(esPdf);
+  const deFotos=(t.fotos||[]).filter(esPdf);
+  const seen=new Set();
+  return [...deArchivos,...deFotos].filter(a=>{
+    const k=a.url||a.nombre; if(seen.has(k)) return false; seen.add(k); return true;
+  });
+}
+function abrirPdf(a){
+  if(!a||!a.url) return;
+  let visor=$("#visorPdf");
+  if(!visor){
+    visor=document.createElement("dialog");
+    visor.id="visorPdf";
+    document.body.appendChild(visor);
+  }
+  visor.innerHTML=`<div class="visor-box">
+    <div class="visor-bar">
+      <strong>${escapeHtml(a.nombre||"documento.pdf")}</strong>
+      <button class="btn btn-primary" type="button" id="cerrarPdf">Cerrar</button>
+    </div>
+    <iframe src="${escapeHtml(a.url)}" title="PDF"></iframe>
+  </div>`;
+  visor.showModal();
+  const cerrar=()=>{visor.close(); visor.innerHTML="";};
+  $("#cerrarPdf").onclick=cerrar;
+  visor.addEventListener("cancel", e=>{e.preventDefault(); cerrar();},{once:true});
+}
+
+async function patch(id,body){
+  const res=await api("/api/trabajos/"+id,{method:"PATCH",body});
+  await load();
+  if(res.instalacion_creada){toast("Medidas terminadas. Ya está creada la instalación."); openJob(res.instalacion_creada.id);}
+  else openJob(id);
+}
+function toast(t){document.querySelectorAll(".toast").forEach(n=>n.remove()); const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),4000);}
+function pedirAvisos(){if("Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});}
+function avisar(prev){(state.alertas||[]).filter(a=>!a.leida && !prev.has(a.id)).forEach(a=>{toast(a.texto); if("Notification" in window && Notification.permission==="granted"){try{new Notification("Agenda Cortinas",{body:a.texto});}catch{}}});}
+async function load(){
+  const prev=new Set((state.alertas||[]).map(a=>a.id));
+  const data=await api("/api/trabajos");
+  state.trabajos=data.trabajos; state.alertas=data.alertas||[]; state.user=data.user; state.instaladores=data.instaladores||[];
+  try { const red = await api("/api/red"); state.enlaces = red.enlaces || []; } catch {}
+  avisar(prev); render();
+}
+async function boot(){
+  try{const me=await api("/api/me"); state.user=me.user; state.instaladores=me.instaladores||[]; if(state.user){pedirAvisos(); await load();} else render();}
+  catch{render();}
+  setInterval(()=>{if(state.user && !$("#dlg")?.open && !$("#dlgAlertas")?.open) load().catch(()=>{});},20000);
+}
+boot();
+</script>
+</body>
+</html>
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+    .login-wrap{min-height:80vh;display:grid;place-items:center}
+    .login-card{width:min(440px,100%);padding:28px 24px}
+    label{display:block;font-size:14px;font-weight:700;margin:12px 0 6px}
+    input,select,textarea{width:100%;padding:14px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:18px}
+    textarea{min-height:80px;font-size:16px}
+    .hint{font-size:14px;color:var(--muted);margin-top:14px}
+    .error{color:var(--danger);font-size:15px;margin-top:8px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+    .stat{padding:12px;text-align:center}
+    .stat b{display:block;font-size:22px;font-family:Fraunces,serif}
+    .stat span{font-size:12px;color:var(--muted)}
+    .tabs{display:flex;gap:8px;margin:0 0 14px}
+    .tabs button{flex:1}
+    .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+    .chips{display:flex;gap:6px;overflow:auto;padding-bottom:10px}
+    .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;font-size:14px;cursor:pointer;white-space:nowrap}
+    .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+    .job{padding:16px;margin-bottom:12px;cursor:pointer}
+    .job.big{padding:20px}
+    .job h3{font-size:22px}
+    .meta{color:var(--muted);font-size:15px;margin-top:4px}
+    .badge{font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;text-transform:uppercase}
+    .s-nueva{background:#f3e6d4;color:#7a5426}
+    .s-asignada{background:#e4eef8;color:#2b5d8c}
+    .s-cita{background:#efe6c8;color:#7a5b10}
+    .s-en_curso{background:#e2eee6;color:#2f5a40}
+    .s-finalizada{background:#e8e4df;color:#5b524a}
+    .fase{display:inline-block;font-size:12px;font-weight:800;color:#9a3f16;text-transform:uppercase;margin-right:6px}
+    .empty{text-align:center;padding:40px 16px;color:var(--muted)}
+    dialog{border:0;padding:0;background:transparent;max-width:640px;width:calc(100% - 18px)}
+    dialog::backdrop{background:rgba(42,29,20,.45)}
+    .sheet{background:var(--card);border-radius:20px;padding:20px;max-height:92vh;overflow:auto}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+    .msgs{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+    .msg{background:#f3ebe1;border-radius:14px;padding:10px 12px}
+    .msg.instalador{background:#e8efe9}
+    .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+    .photos img{width:100%;height:110px;object-fit:cover;border-radius:12px;display:block}
+    .bell{position:relative;width:46px;height:46px}
+    .dot{position:absolute;top:6px;right:6px;min-width:18px;height:18px;background:var(--terr);color:#fff;border-radius:99px;font-size:11px;display:grid;place-items:center}
+    .week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .day{min-height:120px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+    .day.today{border-color:var(--terr);box-shadow:0 0 0 2px #f1c2a4}
+    .day h4{font-size:13px;margin-bottom:6px}
+    .pill{display:block;width:100%;text-align:left;border:0;border-radius:10px;padding:7px 8px;margin-bottom:6px;background:#f3e6d4;font-size:13px;cursor:pointer}
+    .pill.inst{background:#e2eee6}
+    .weekbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
+    .fab{position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:0;background:var(--terr);color:#fff;font-size:32px;box-shadow:0 10px 24px rgba(154,63,22,.35)}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 16px;border-radius:14px;z-index:50;max-width:92%}
+    .alert-item{padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+    .pdf-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:8px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;font-weight:700;cursor:pointer;text-align:left}
+    #visorPdf{max-width:none;width:100%;height:100%;padding:0}
+    #visorPdf::backdrop{background:rgba(20,12,8,.72)}
+    .visor-box{background:#1b140f;color:#fff;min-height:100dvh;display:flex;flex-direction:column}
+    .visor-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));background:#2a1d14;position:sticky;top:0;z-index:2}
+    .visor-bar strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .visor-box iframe,.visor-box embed{flex:1;width:100%;border:0;background:#fff;min-height:70vh}
+    @media(max-width:800px){
+      .stats{grid-template-columns:repeat(2,1fr)}
+      .row{grid-template-columns:1fr}
+      .week{grid-template-columns:1fr}
+      .day{min-height:auto}
+    }
+  </style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<script>
+const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",finalizada:"Terminada"};
+const FASES = {medidas:"Medir",instalacion:"Instalar"};
+const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+const state = {user:null,trabajos:[],alertas:[],instaladores:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
+const $ = (s,el=document)=>el.querySelector(s);
+function monday(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
+function ymd(d){const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");}
+function addDays(d,n){const x=new Date(d); x.setDate(x.getDate()+n); return x;}
+function fmtCita(t){if(!t.cita_fecha) return "Sin día"; const [y,m,d]=t.cita_fecha.split("-"); return d+"/"+m+(t.cita_hora?" · "+t.cita_hora:"");}
+function fmtFecha(iso){if(!iso) return ""; const d=new Date(iso.replace(" ","T")); return Number.isNaN(d.getTime())?iso:d.toLocaleString("es-ES",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
+function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+function unread(){return (state.alertas||[]).filter(a=>!a.leida);}
+function esInst(){return state.user && state.user.rol==="instalador";}
+
+async function api(path, opts={}) {
+  const res = await fetch(path,{credentials:"same-origin",...opts,headers:opts.form?{}:{"Content-Type":"application/json",...(opts.headers||{})},body:opts.form?opts.body:(opts.body?JSON.stringify(opts.body):undefined)});
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || "No se ha podido hacer");
+  return data;
+}
+
+function filtered(){
+  return state.trabajos.filter(t=>{
+    if(state.fase!=="todas" && t.fase!==state.fase) return false;
+    if(state.filtro==="activos") return t.estado!=="finalizada";
+    if(state.filtro==="todos") return true;
+    return t.estado===state.filtro;
+  });
+}
+
+function render(){
+  if(!state.user){
+    $("#app").innerHTML = `<div class="login-wrap"><div class="login-card card">
+      <div class="logo" style="width:52px;height:52px;font-size:22px">C</div>
+      <h1 style="margin:10px 0 6px">Agenda Cortinas</h1>
+      <p class="hint" style="margin-top:0">Elige tu nombre y pon la contraseña.</p>
+      <form id="loginForm">
+        <label>Quién eres</label>
+        <select name="usuario" id="selLogin"><option value="dueno">Dueño</option><option value="juan">Juan (instalador)</option></select>
+        <label>Contraseña</label><input name="password" type="password" required>
+        <div class="error">${state.error||""}</div>
+        <button class="btn btn-primary btn-xl" type="submit">Entrar</button>
+      </form>
+      <p class="hint">Dueño: <b>dueno</b> / <b>dueno123</b><br>Instalador de prueba: <b>juan</b> / <b>juan123</b></p>
+    </div></div>`;
+    api("/api/login-opciones").then(d=>{
+      const sel=$("#selLogin");
+      sel.innerHTML=(d.usuarios||[]).map(u=>`<option value="${u.usuario}">${escapeHtml(u.nombre)}${u.rol==="dueno"?" (dueño)":""}</option>`).join("") || `<option value="dueno">Dueño</option>`;
+    }).catch(()=>{});
+    $("#loginForm").onsubmit=async e=>{
+      e.preventDefault();
+      try{state.error=""; const data=await api("/api/login",{method:"POST",body:Object.fromEntries(new FormData(e.target))}); state.user=data.user; pedirAvisos(); await load();}
+      catch(err){state.error=err.message; render();}
+    };
+    return;
+  }
+  if(esInst()) renderInstalador(); else renderDueno();
+}
+
+function header(extra=""){
+  const n=unread().length;
+  return `<header class="appbar"><div class="brand"><div class="logo">C</div><div><strong>Agenda Cortinas</strong><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
+    <div style="display:flex;gap:8px">${extra}
+      <button class="btn btn-ghost bell" id="btnBell">🔔${n?`<span class="dot">${n}</span>`:""}</button>
+      <button class="btn btn-ghost" id="btnSalir">Salir</button></div></header>`;
+}
+function bindCommon(){
+  $("#btnSalir").onclick=async()=>{await api("/api/logout",{method:"POST"}); state.user=null; render();};
+  $("#btnBell").onclick=openAlertas;
+}
+
+function renderInstalador(){
+  const pendientes=state.trabajos.filter(t=>t.estado==="asignada");
+  const semana=citasSemana();
+  const enCurso=state.trabajos.filter(t=>t.estado==="en_curso");
+  $("#app").innerHTML=`${header()}
+    <div class="tabs">
+      <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Mis trabajos</button>
+      <button class="btn btn-ghost ${state.vista==="semana"?"on":""}" data-v="semana">Semana</button>
+    </div>
+    <div id="main"></div><dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
+  bindCommon();
+  document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
+  const main=$("#main");
+  if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
+  main.innerHTML=`
+    ${pendientes.length?`<h2 style="margin:8px 0">Por citar</h2>${pendientes.map(t=>jobCard(t,true)).join("")}`:""}
+    ${enCurso.length?`<h2 style="margin:16px 0 8px">En marcha</h2>${enCurso.map(t=>jobCard(t,true)).join("")}`:""}
+    <h2 style="margin:16px 0 8px">Citas de esta semana</h2>
+    ${semana.length?semana.map(t=>jobCard(t,true)).join(""):`<div class="card empty">No hay citas esta semana.</div>`}`;
+  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+}
+
+function renderDueno(){
+  const c={pend:0,cita:0,curso:0,fin:0};
+  state.trabajos.forEach(t=>{ if(t.estado==="finalizada")c.fin++; else if(t.estado==="en_curso")c.curso++; else if(t.estado==="cita")c.cita++; else c.pend++; });
+  $("#app").innerHTML=`${header(`<button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
+    ${state.enlaces && state.enlaces.length ? `<div class="card" style="padding:12px 14px;margin-bottom:12px"><b>En el iPhone:</b> misma Wi‑Fi que el Mac y abre Safari en<br>${state.enlaces.map(e=>`<code style="font-size:16px">${e}</code>`).join("<br>")}<br><span class="meta">Luego: Compartir → Añadir a pantalla de inicio.</span></div>` : ""}
+    <div class="stats">
+      <div class="card stat"><b>${c.pend}</b><span>Por enviar / citar</span></div>
+      <div class="card stat"><b>${c.cita}</b><span>Con cita</span></div>
+      <div class="card stat"><b>${c.curso}</b><span>Empezadas</span></div>
+      <div class="card stat"><b>${c.fin}</b><span>Terminadas</span></div>
+    </div>
+    <div class="tabs">
+      <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Lista</button>
+      <button class="btn btn-ghost ${state.vista==="semana"?"on":""}" data-v="semana">Semana</button>
+    </div>
+    <div id="main"></div>
+    <button class="fab" id="fab">+</button>
+    <dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
+  bindCommon(); $("#btnEq").onclick=openEquipo; $("#fab").onclick=openNuevo;
+  document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
+  const main=$("#main");
+  if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
+  main.innerHTML=`
+    <div class="chips">${[["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["finalizada","Terminadas"],["todos","Todo"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div>
+    <div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div>
+    ${filtered().map(t=>jobCard(t,false)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Pulsa + para crear una toma de medidas.</p></div>`}`;
+  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
+  document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
+  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+}
+
+function jobCard(t,big){
+  return `<article class="card job ${big?"big":""}" data-id="${t.id}">
+    <div style="display:flex;justify-content:space-between;gap:8px"><div>
+      <span class="fase">${FASES[t.fase]}</span><h3>${escapeHtml(t.cliente)}</h3>
+      ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
       <div class="meta">${escapeHtml(t.direccion||"")}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
       <div class="meta">${fmtCita(t)}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</div>
     </div><span class="badge s-${t.estado}">${ESTADOS[t.estado]}</span></div></article>`;
