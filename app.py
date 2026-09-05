@@ -16,8 +16,12 @@ from flask import Flask, jsonify, redirect, render_template, request, send_from_
 from werkzeug.utils import secure_filename
 
 APP_DIR = Path(__file__).resolve().parent
-DATA_FILE = APP_DIR / "data.json"
-UPLOAD_DIR = APP_DIR / "uploads"
+# En Render el código se borra en cada deploy. Los datos tienen que ir
+# al disco persistente (variable DATA_DIR, normalmente /var/data).
+DATA_DIR = Path(os.environ.get("DATA_DIR") or ( "/var/data" if Path("/var/data").is_dir() else APP_DIR ))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATA_FILE = DATA_DIR / "data.json"
+UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf"}
