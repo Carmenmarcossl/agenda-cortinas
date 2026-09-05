@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#3d2b1f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Cortinas" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
   <title>Agenda Cortinas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -475,13 +479,39 @@ async function patch(id,body){
   else openJob(id);
 }
 function toast(t){document.querySelectorAll(".toast").forEach(n=>n.remove()); const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),4000);}
-function pedirAvisos(){if("Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});}
-function avisar(prev){(state.alertas||[]).filter(a=>!a.leida && !prev.has(a.id)).forEach(a=>{toast(a.texto); if("Notification" in window && Notification.permission==="granted"){try{new Notification("Agenda Cortinas",{body:a.texto});}catch{}}});}
+function urlB64ToUint8(b64){
+  const pad="=".repeat((4-b64.length%4)%4);
+  const raw=atob((b64+pad).replace(/-/g,"+").replace(/_/g,"/"));
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+function ponerBadge(n){
+  const c=Number(n||0);
+  if(navigator.setAppBadge) navigator.setAppBadge(c).catch(()=>{});
+  else if(navigator.clearAppBadge && !c) navigator.clearAppBadge().catch(()=>{});
+}
+async function activarPush(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  try{
+    const reg=await navigator.serviceWorker.register("/sw.js",{scope:"/"});
+    let perm="default";
+    if("Notification" in window){
+      perm=Notification.permission;
+      if(perm==="default") perm=await Notification.requestPermission();
+    }
+    if(perm!=="granted") return;
+    const {key}=await api("/api/push-key");
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:urlB64ToUint8(key)});
+    await api("/api/push-sub",{method:"POST",body:sub.toJSON()});
+  }catch(e){}
+}
+function pedirAvisos(){activarPush();}
+function avisar(prev){(state.alertas||[]).filter(a=>!a.leida && !prev.has(a.id)).forEach(a=>{toast(a.texto);});}
 async function load(){
   const prev=new Set((state.alertas||[]).map(a=>a.id));
   const data=await api("/api/trabajos");
   state.trabajos=data.trabajos; state.alertas=data.alertas||[]; state.user=data.user; state.instaladores=data.instaladores||[];
   try { const red = await api("/api/red"); state.enlaces = red.enlaces || []; } catch {}
+  ponerBadge(unread().length);
   avisar(prev); render();
 }
 async function boot(){
