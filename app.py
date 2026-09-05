@@ -49,7 +49,7 @@ def now_iso() -> str:
 
 
 def empty_db() -> dict:
-    return {"usuarios": [dict(u) for u in SEED_USERS], "trabajos": [], "alertas": []}
+    return {"usuarios": [dict(u) for u in SEED_USERS], "trabajos": [], "alertas": [], "push": []}
 
 
 def load_db() -> dict:
@@ -64,6 +64,7 @@ def load_db() -> dict:
         return empty_db()
     data.setdefault("trabajos", [])
     data.setdefault("alertas", [])
+    data.setdefault("push", [])
     if not data.get("usuarios"):
         data["usuarios"] = [dict(u) for u in SEED_USERS]
     else:
@@ -148,6 +149,7 @@ def add_alerta(db: dict, *, para: str, texto: str, trabajo_id: str, tipo: str) -
         },
     )
     db["alertas"] = db["alertas"][:300]
+    enviar_push(db, para=para, texto=texto, trabajo_id=trabajo_id)
 
 
 def alertas_de(db: dict, user: dict) -> list:
@@ -271,9 +273,116 @@ def asignar(trabajo: dict, inst: dict, user: dict, db: dict, fase_txt: str) -> N
     )
 
 
+VAPID_PRIVATE = os.environ.get("VAPID_PRIVATE", "PVALtyk9-4X3H84uihVUHfXvuQEKAlZumrC_4vsmS5c")
+VAPID_PUBLIC = os.environ.get("VAPID_PUBLIC", "BJXXfXBD9fcpRfHqBE9ImJeqg8Tix4CLo1unlUB0RT9nHgp7dsLWLWmcPfzVVaiM1hGEeWROrZWAT10-ZWHsJSE")
+VAPID_MAIL = os.environ.get("VAPID_MAIL", "mailto:agenda@cortinas.local")
+
+
+def enviar_push(db: dict, *, para: str, texto: str, trabajo_id: str = "") -> None:
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return
+    destinos = []
+    for s in db.get("push") or []:
+        u = s.get("usuario")
+        if para == "dueno":
+            user = find_user(db, u) or {}
+            if user.get("rol") == "dueno" or u == "dueno":
+                destinos.append(s)
+        elif u == para:
+            destinos.append(s)
+    noleidas = {}
+    for a in db.get("alertas") or []:
+        if a.get("leida"):
+            continue
+        noleidas[a.get("para")] = noleidas.get(a.get("para"), 0) + 1
+    for s in destinos:
+        badge = noleidas.get(s.get("usuario"), 0)
+        if para == "dueno" and s.get("usuario") == "dueno":
+            badge = noleidas.get("dueno", 0)
+        try:
+            webpush(
+                subscription_info={"endpoint": s["endpoint"], "keys": s.get("keys") or {}},
+                data=json.dumps({"titulo": "Agenda Cortinas", "texto": texto, "trabajo_id": trabajo_id, "badge": badge}, ensure_ascii=False),
+                vapid_private_key=VAPID_PRIVATE,
+                vapid_claims={"sub": VAPID_MAIL},
+            )
+        except Exception:
+            pass
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return jsonify(
+        {
+            "name": "Agenda Cortinas",
+            "short_name": "Cortinas",
+            "start_url": "/",
+            "display": "standalone",
+            "background_color": "#f6efe6",
+            "theme_color": "#3d2b1f",
+            "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}],
+        }
+    )
+
+
+@app.get("/icon.svg")
+def icon_svg():
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#c45c26"/><text x="32" y="42" text-anchor="middle" font-size="28" font-family="Georgia,serif" fill="#fff">C</text></svg>"""
+    return app.response_class(svg, mimetype="image/svg+xml")
+
+
+@app.get("/sw.js")
+def service_worker():
+    js = """self.addEventListener('push', event => {
+  let data = {titulo:'Agenda Cortinas', texto:'Tienes un aviso', badge:1};
+  try { data = Object.assign(data, event.data.json()); } catch(e) {}
+  const n = Number(data.badge||1);
+  event.waitUntil((async () => {
+    if (self.registration.setAppBadge) await self.registration.setAppBadge(n);
+    await self.registration.showNotification(data.titulo||'Agenda Cortinas', {
+      body: data.texto||'',
+      tag: 'agenda',
+      renotify: true,
+      data
+    });
+  })());
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow('/'));
+});
+"""
+    resp = app.response_class(js, mimetype="application/javascript")
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
+
+@app.get("/api/push-key")
+def api_push_key():
+    return jsonify({"key": VAPID_PUBLIC})
+
+
+@app.post("/api/push-sub")
+@login_required
+def api_push_sub():
+    body = request.get_json(silent=True) or {}
+    endpoint = (body.get("endpoint") or "").strip()
+    keys = body.get("keys") or {}
+    if not endpoint or not keys.get("p256dh") or not keys.get("auth"):
+        return jsonify({"error": "Suscripción incompleta"}), 400
+    db = load_db()
+    user = current_user()
+    db["push"] = [s for s in db.get("push") or [] if s.get("endpoint") != endpoint]
+    db["push"].append({"usuario": user["usuario"], "endpoint": endpoint, "keys": keys})
+    save_db(db)
+    return jsonify({"ok": True})
 
 
 @app.get("/uploads/<path:filename>")
