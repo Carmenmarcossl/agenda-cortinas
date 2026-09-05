@@ -1,684 +1,490 @@
-#!/usr/bin/env python3
-"""Agenda de trabajos para empresa de instalación de cortinas."""
-
-from __future__ import annotations
-
-import json
-import os
-import re
-import secrets
-import socket
-from datetime import datetime
-from functools import wraps
-from pathlib import Path
-
-from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
-from werkzeug.utils import secure_filename
-
-APP_DIR = Path(__file__).resolve().parent
-DATA_FILE = APP_DIR / "data.json"
-UPLOAD_DIR = APP_DIR / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
-
-ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf"}
-MAX_BYTES = 20 * 1024 * 1024
-
-app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "cortinas-agenda-cambia-esta-clave")
-app.config["MAX_CONTENT_LENGTH"] = MAX_BYTES
-app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.jinja_env.auto_reload = True
-app.jinja_env.cache = {}
-
-SEED_USERS = [
-    {"usuario": "dueno", "password": "dueno123", "nombre": "Dueño", "rol": "dueno"},
-    {"usuario": "juan", "password": "juan123", "nombre": "Juan", "rol": "instalador"},
-]
-
-STATUSES = ["nueva", "asignada", "cita", "en_curso", "finalizada"]
-FASES = ["medidas", "instalacion"]
-FOTO_MOMENTOS = ["general", "medidas", "inicio", "fin"]
-
-
-def now_iso() -> str:
-    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-
-
-def empty_db() -> dict:
-    return {"usuarios": [dict(u) for u in SEED_USERS], "trabajos": [], "alertas": []}
-
-
-def load_db() -> dict:
-    if not DATA_FILE.exists():
-        db = empty_db()
-        save_db(db)
-        return db
-    try:
-        with DATA_FILE.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return empty_db()
-    data.setdefault("trabajos", [])
-    data.setdefault("alertas", [])
-    if not data.get("usuarios"):
-        data["usuarios"] = [dict(u) for u in SEED_USERS]
-    else:
-        known = {u["usuario"] for u in data["usuarios"]}
-        if "dueno" not in known:
-            data["usuarios"].insert(0, dict(SEED_USERS[0]))
-    for t in data["trabajos"]:
-        t.setdefault("fase", "medidas")
-        t.setdefault("fotos", [])
-        t.setdefault("mensajes", [])
-        t.setdefault("relacionado_id", "")
-        t.setdefault("origen_id", "")
-        t.setdefault("asignado_a", "")
-        t.setdefault("asignado_nombre", "")
-        t.setdefault("cliente_final", "")
-        t.setdefault("archivos", [])
-        t.setdefault("localidad", "")
-    return data
-
-
-def guardar_adjunto(file, trabajo: dict, user: dict, momento: str = "general") -> dict:
-    if not file or not file.filename:
-        raise ValueError("Archivo vacío")
-    ext = Path(file.filename).suffix.lower()
-    if ext not in ALLOWED_EXT:
-        raise ValueError("Usa una foto (JPG/PNG) o un PDF")
-    name = f"{trabajo['id']}_{secrets.token_hex(6)}{ext}"
-    dest = UPLOAD_DIR / secure_filename(name)
-    file.save(dest)
-    item = {
-        "id": secrets.token_hex(6),
-        "archivo": dest.name,
-        "url": f"/uploads/{dest.name}",
-        "nombre": Path(file.filename).name,
-        "tipo": "pdf" if ext == ".pdf" else "foto",
-        "momento": momento if momento in FOTO_MOMENTOS else "general",
-        "caption": "",
-        "autor": user["nombre"],
-        "fecha": now_iso(),
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#3d2b1f" />
+  <title>Agenda Cortinas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink:#2a1d14; --muted:#6d5a4b; --paper:#f6efe6; --card:#fffaf4;
+      --line:#e4d5c5; --terr:#c45c26; --sage:#4f6f5a; --danger:#b42318;
+      --shadow:0 10px 30px rgba(42,29,20,.08); --r:18px;
     }
-    trabajo.setdefault("archivos", []).append(item)
-    if item["tipo"] == "foto":
-        trabajo.setdefault("fotos", []).append(item)
-    return item
-
-
-def save_db(db: dict) -> None:
-    tmp = DATA_FILE.with_suffix(".json.tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(db, f, ensure_ascii=False, indent=2)
-    tmp.replace(DATA_FILE)
-
-
-def find_trabajo(db: dict, trabajo_id: str):
-    return next((t for t in db["trabajos"] if t["id"] == trabajo_id), None)
-
-
-def find_user(db: dict, usuario: str):
-    usuario = (usuario or "").strip().lower()
-    return next((u for u in db["usuarios"] if u["usuario"] == usuario), None)
-
-
-def instaladores(db: dict) -> list:
-    return [u for u in db["usuarios"] if u.get("rol") == "instalador"]
-
-
-def public_user(u: dict) -> dict:
-    return {"usuario": u["usuario"], "nombre": u["nombre"], "rol": u["rol"]}
-
-
-def add_alerta(db: dict, *, para: str, texto: str, trabajo_id: str, tipo: str) -> None:
-    db["alertas"].insert(
-        0,
-        {
-            "id": secrets.token_hex(6),
-            "para": para,
-            "texto": texto,
-            "trabajo_id": trabajo_id,
-            "tipo": tipo,
-            "leida": False,
-            "fecha": now_iso(),
-        },
-    )
-    db["alertas"] = db["alertas"][:300]
-
-
-def alertas_de(db: dict, user: dict) -> list:
-    out = []
-    for a in db["alertas"]:
-        para = a.get("para")
-        if user["rol"] == "dueno" and para in ("dueno", user["usuario"]):
-            out.append(a)
-        elif user["rol"] == "instalador" and para == user["usuario"]:
-            out.append(a)
-    return out
-
-
-def add_msg(trabajo: dict, user: dict, texto: str) -> None:
-    trabajo["mensajes"].append(
-        {
-            "id": secrets.token_hex(4),
-            "autor": user["nombre"],
-            "rol": user["rol"],
-            "texto": texto,
-            "fecha": now_iso(),
-        }
-    )
-
-
-def login_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if "usuario" not in session:
-            if request.path.startswith("/api/") or request.path.startswith("/uploads/"):
-                return jsonify({"error": "No autenticado"}), 401
-            return redirect("/")
-        return fn(*args, **kwargs)
-
-    return wrapper
-
-
-def current_user() -> dict:
-    db = load_db()
-    username = session.get("usuario")
-    info = find_user(db, username) or {}
-    return {
-        "usuario": username,
-        "nombre": info.get("nombre", username),
-        "rol": info.get("rol"),
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:"Source Sans 3",system-ui,sans-serif;background:radial-gradient(1200px 500px at 10% -10%,#f3d9b8 0%,transparent 55%),var(--paper);color:var(--ink);line-height:1.4}
+    button,input,select,textarea{font-family:inherit}
+    h1,h2,.brand strong{font-family:Fraunces,Georgia,serif}
+    a{color:#9a3f16}
+    .wrap{max-width:1080px;margin:0 auto;padding:16px 16px 110px}
+    header.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 16px}
+    .brand{display:flex;align-items:center;gap:10px}
+    .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(145deg,#d9783a,#8b3a16);display:grid;place-items:center;color:#fff;font-weight:700}
+    .brand small{display:block;color:var(--muted);font-family:"Source Sans 3",sans-serif;font-size:12px}
+    .btn{display:inline-block;border:0;border-radius:14px;padding:12px 16px;cursor:pointer;font-weight:700;font-size:16px;text-decoration:none;text-align:center}
+    a.btn{color:inherit}
+    .btn-primary{background:var(--terr);color:#fff}
+    .btn-sage{background:var(--sage);color:#fff}
+    .btn-ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+    .btn-danger{background:#fff;color:var(--danger);border:1px solid #f0c7c2}
+    .btn-full{width:100%}
+    .btn-xl{display:block;width:100%;padding:18px 16px;font-size:20px;border-radius:16px;margin-top:10px}
+    .detalle{margin:10px 0 14px;word-break:break-word;overflow-wrap:anywhere}
+    .stack{display:flex;flex-direction:column;gap:0;margin:8px 0 14px;clear:both}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+    .login-wrap{min-height:80vh;display:grid;place-items:center}
+    .login-card{width:min(440px,100%);padding:28px 24px}
+    label{display:block;font-size:14px;font-weight:700;margin:12px 0 6px}
+    input,select,textarea{width:100%;padding:14px 12px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:18px}
+    textarea{min-height:80px;font-size:16px}
+    .hint{font-size:14px;color:var(--muted);margin-top:14px}
+    .error{color:var(--danger);font-size:15px;margin-top:8px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+    .stat{padding:12px;text-align:center}
+    .stat b{display:block;font-size:22px;font-family:Fraunces,serif}
+    .stat span{font-size:12px;color:var(--muted)}
+    .tabs{display:flex;gap:8px;margin:0 0 14px}
+    .tabs button{flex:1}
+    .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+    .chips{display:flex;gap:6px;overflow:auto;padding-bottom:10px}
+    .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;font-size:14px;cursor:pointer;white-space:nowrap}
+    .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+    .job{padding:16px;margin-bottom:12px;cursor:pointer}
+    .job.big{padding:20px}
+    .job h3{font-size:22px}
+    .meta{color:var(--muted);font-size:15px;margin-top:4px}
+    .badge{font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;text-transform:uppercase}
+    .s-nueva{background:#f3e6d4;color:#7a5426}
+    .s-asignada{background:#e4eef8;color:#2b5d8c}
+    .s-cita{background:#efe6c8;color:#7a5b10}
+    .s-en_curso{background:#e2eee6;color:#2f5a40}
+    .s-finalizada{background:#e8e4df;color:#5b524a}
+    .fase{display:inline-block;font-size:12px;font-weight:800;color:#9a3f16;text-transform:uppercase;margin-right:6px}
+    .empty{text-align:center;padding:40px 16px;color:var(--muted)}
+    dialog{border:0;padding:0;background:transparent;max-width:640px;width:calc(100% - 18px)}
+    dialog::backdrop{background:rgba(42,29,20,.45)}
+    .sheet{background:var(--card);border-radius:20px;padding:20px;max-height:92vh;overflow:auto}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+    .msgs{margin-top:10px;display:flex;flex-direction:column;gap:8px}
+    .msg{background:#f3ebe1;border-radius:14px;padding:10px 12px}
+    .msg.instalador{background:#e8efe9}
+    .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+    .photos img{width:100%;height:110px;object-fit:cover;border-radius:12px;display:block;cursor:pointer}
+    .bell{position:relative;width:46px;height:46px}
+    .dot{position:absolute;top:6px;right:6px;min-width:18px;height:18px;background:var(--terr);color:#fff;border-radius:99px;font-size:11px;display:grid;place-items:center}
+    .week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .day{min-height:120px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+    .day.today{border-color:var(--terr);box-shadow:0 0 0 2px #f1c2a4}
+    .day h4{font-size:13px;margin-bottom:6px}
+    .pill{display:block;width:100%;text-align:left;border:0;border-radius:10px;padding:7px 8px;margin-bottom:6px;background:#f3e6d4;font-size:13px;cursor:pointer}
+    .pill.inst{background:#e2eee6}
+    .weekbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
+    .fab{position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:0;background:var(--terr);color:#fff;font-size:32px;box-shadow:0 10px 24px rgba(154,63,22,.35)}
+    .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 16px;border-radius:14px;z-index:50;max-width:92%}
+    .alert-item{padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+    .pdf-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:8px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;font-weight:700;cursor:pointer;text-align:left}
+    #visorPdf{max-width:none;width:100%;height:100%;padding:0}
+    #visorPdf::backdrop{background:rgba(20,12,8,.72)}
+    .visor-box{background:#1b140f;color:#fff;min-height:100dvh;display:flex;flex-direction:column}
+    .visor-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));background:#2a1d14;position:sticky;top:0;z-index:2}
+    .visor-bar strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .visor-box iframe,.visor-box embed{flex:1;width:100%;border:0;background:#fff;min-height:70vh}
+    .visor-box img{flex:1;width:100%;height:auto;max-height:calc(100dvh - 64px);object-fit:contain;background:#1b140f;padding:8px}
+    @media(max-width:800px){
+      .stats{grid-template-columns:repeat(2,1fr)}
+      .row{grid-template-columns:1fr}
+      .week{grid-template-columns:1fr}
+      .day{min-height:auto}
     }
+  </style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<script>
+const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",finalizada:"Terminada"};
+const FASES = {medidas:"Medir",instalacion:"Instalar"};
+const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+const state = {user:null,trabajos:[],alertas:[],instaladores:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
+const $ = (s,el=document)=>el.querySelector(s);
+function monday(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
+function ymd(d){const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");}
+function addDays(d,n){const x=new Date(d); x.setDate(x.getDate()+n); return x;}
+function fmtCita(t){if(!t.cita_fecha) return "Sin día"; const [y,m,d]=t.cita_fecha.split("-"); return d+"/"+m+(t.cita_hora?" · "+t.cita_hora:"");}
+function fmtFecha(iso){if(!iso) return ""; const d=new Date(iso.replace(" ","T")); return Number.isNaN(d.getTime())?iso:d.toLocaleString("es-ES",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
+function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+function unread(){return (state.alertas||[]).filter(a=>!a.leida);}
+function esInst(){return state.user && state.user.rol==="instalador";}
 
+async function api(path, opts={}) {
+  const res = await fetch(path,{credentials:"same-origin",...opts,headers:opts.form?{}:{"Content-Type":"application/json",...(opts.headers||{})},body:opts.form?opts.body:(opts.body?JSON.stringify(opts.body):undefined)});
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.error || "No se ha podido hacer");
+  return data;
+}
 
-def slug_usuario(nombre: str) -> str:
-    s = (nombre or "").strip().lower()
-    s = s.replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u").replace("ñ", "n")
-    s = re.sub(r"[^a-z0-9]+", "", s)
-    return s or "instalador"
+function filtered(){
+  return state.trabajos.filter(t=>{
+    if(state.fase!=="todas" && t.fase!==state.fase) return false;
+    if(state.filtro==="activos") return t.estado!=="finalizada";
+    if(state.filtro==="todos") return true;
+    return t.estado===state.filtro;
+  });
+}
 
+function render(){
+  if(!state.user){
+    $("#app").innerHTML = `<div class="login-wrap"><div class="login-card card">
+      <div class="logo" style="width:52px;height:52px;font-size:22px">C</div>
+      <h1 style="margin:10px 0 6px">Agenda Cortinas</h1>
+      <p class="hint" style="margin-top:0">Elige tu nombre y pon la contraseña.</p>
+      <form id="loginForm">
+        <label>Quién eres</label>
+        <select name="usuario" id="selLogin"><option value="dueno">Dueño</option><option value="juan">Juan (instalador)</option></select>
+        <label>Contraseña</label><input name="password" type="password" required>
+        <div class="error">${state.error||""}</div>
+        <button class="btn btn-primary btn-xl" type="submit">Entrar</button>
+      </form>
+      <p class="hint">Dueño: <b>dueno</b> / <b>dueno123</b><br>Instalador de prueba: <b>juan</b> / <b>juan123</b></p>
+    </div></div>`;
+    api("/api/login-opciones").then(d=>{
+      const sel=$("#selLogin");
+      sel.innerHTML=(d.usuarios||[]).map(u=>`<option value="${u.usuario}">${escapeHtml(u.nombre)}${u.rol==="dueno"?" (dueño)":""}</option>`).join("") || `<option value="dueno">Dueño</option>`;
+    }).catch(()=>{});
+    $("#loginForm").onsubmit=async e=>{
+      e.preventDefault();
+      try{state.error=""; const data=await api("/api/login",{method:"POST",body:Object.fromEntries(new FormData(e.target))}); state.user=data.user; pedirAvisos(); await load();}
+      catch(err){state.error=err.message; render();}
+    };
+    return;
+  }
+  if(esInst()) renderInstalador(); else renderDueno();
+}
 
-def nuevo_trabajo(user: dict, body: dict, fase: str = "medidas") -> dict:
-    return {
-        "id": secrets.token_hex(8),
-        "fase": fase if fase in FASES else "medidas",
-        "cliente": (body.get("cliente") or "").strip(),
-        "cliente_final": (body.get("cliente_final") or "").strip(),
-        "telefono": (body.get("telefono") or "").strip(),
-        "direccion": (body.get("direccion") or "").strip(),
-        "localidad": (body.get("localidad") or "").strip(),
-        "tipo": (body.get("tipo") or "").strip(),
-        "medidas": (body.get("medidas") or "").strip(),
-        "notas_iniciales": (body.get("notas_iniciales") or "").strip(),
-        "estado": "nueva",
-        "cita_fecha": (body.get("cita_fecha") or "").strip(),
-        "cita_hora": (body.get("cita_hora") or "").strip(),
-        "cita_nota": "",
-        "creado": now_iso(),
-        "actualizado": now_iso(),
-        "creado_por": user["nombre"],
-        "relacionado_id": (body.get("relacionado_id") or "").strip(),
-        "origen_id": (body.get("origen_id") or "").strip(),
-        "asignado_a": (body.get("asignado_a") or "").strip().lower(),
-        "asignado_nombre": (body.get("asignado_nombre") or "").strip(),
-        "mensajes": [],
-        "fotos": [],
-        "archivos": [],
-    }
+function header(extra=""){
+  const n=unread().length;
+  return `<header class="appbar"><div class="brand"><div class="logo">C</div><div><strong>Agenda Cortinas</strong><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
+    <div style="display:flex;gap:8px">${extra}
+      <button class="btn btn-ghost bell" id="btnBell">🔔${n?`<span class="dot">${n}</span>`:""}</button>
+      <button class="btn btn-ghost" id="btnSalir">Salir</button></div></header>`;
+}
+function bindCommon(){
+  $("#btnSalir").onclick=async()=>{await api("/api/logout",{method:"POST"}); state.user=null; render();};
+  $("#btnBell").onclick=openAlertas;
+}
 
+function renderInstalador(){
+  const pendientes=state.trabajos.filter(t=>t.estado==="asignada");
+  const semana=citasSemana();
+  const enCurso=state.trabajos.filter(t=>t.estado==="en_curso");
+  $("#app").innerHTML=`${header()}
+    <div class="tabs">
+      <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Mis trabajos</button>
+      <button class="btn btn-ghost ${state.vista==="semana"?"on":""}" data-v="semana">Semana</button>
+    </div>
+    <div id="main"></div><dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
+  bindCommon();
+  document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
+  const main=$("#main");
+  if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
+  main.innerHTML=`
+    ${pendientes.length?`<h2 style="margin:8px 0">Por citar</h2>${pendientes.map(t=>jobCard(t,true)).join("")}`:""}
+    ${enCurso.length?`<h2 style="margin:16px 0 8px">En marcha</h2>${enCurso.map(t=>jobCard(t,true)).join("")}`:""}
+    <h2 style="margin:16px 0 8px">Citas de esta semana</h2>
+    ${semana.length?semana.map(t=>jobCard(t,true)).join(""):`<div class="card empty">No hay citas esta semana.</div>`}`;
+  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+}
 
-def crear_instalacion_desde(medidas: dict, user: dict) -> dict:
-    inst = nuevo_trabajo(
-        user,
-        {
-            "cliente": medidas.get("cliente"),
-            "cliente_final": medidas.get("cliente_final"),
-            "telefono": medidas.get("telefono"),
-            "direccion": medidas.get("direccion"),
-            "localidad": medidas.get("localidad"),
-            "tipo": medidas.get("tipo"),
-            "medidas": medidas.get("medidas"),
-            "notas_iniciales": "Instalación creada al terminar la toma de medidas.",
-            "origen_id": medidas["id"],
-            "relacionado_id": medidas["id"],
-            "asignado_a": medidas.get("asignado_a") or "",
-            "asignado_nombre": medidas.get("asignado_nombre") or "",
-        },
-        fase="instalacion",
-    )
-    if inst["notas_iniciales"]:
-        add_msg(inst, user, inst["notas_iniciales"])
-    return inst
+function renderDueno(){
+  const c={pend:0,cita:0,curso:0,fin:0};
+  state.trabajos.forEach(t=>{ if(t.estado==="finalizada")c.fin++; else if(t.estado==="en_curso")c.curso++; else if(t.estado==="cita")c.cita++; else c.pend++; });
+  $("#app").innerHTML=`${header(`<button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
+    ${state.enlaces && state.enlaces.length ? `<div class="card" style="padding:12px 14px;margin-bottom:12px"><b>En el iPhone:</b> misma Wi‑Fi que el Mac y abre Safari en<br>${state.enlaces.map(e=>`<code style="font-size:16px">${e}</code>`).join("<br>")}<br><span class="meta">Luego: Compartir → Añadir a pantalla de inicio.</span></div>` : ""}
+    <div class="stats">
+      <div class="card stat"><b>${c.pend}</b><span>Por enviar / citar</span></div>
+      <div class="card stat"><b>${c.cita}</b><span>Con cita</span></div>
+      <div class="card stat"><b>${c.curso}</b><span>Empezadas</span></div>
+      <div class="card stat"><b>${c.fin}</b><span>Terminadas</span></div>
+    </div>
+    <div class="tabs">
+      <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Lista</button>
+      <button class="btn btn-ghost ${state.vista==="semana"?"on":""}" data-v="semana">Semana</button>
+    </div>
+    <div id="main"></div>
+    <button class="fab" id="fab">+</button>
+    <dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
+  bindCommon(); $("#btnEq").onclick=openEquipo; $("#fab").onclick=openNuevo;
+  document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
+  const main=$("#main");
+  if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
+  main.innerHTML=`
+    <div class="chips">${[["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["finalizada","Terminadas"],["todos","Todo"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div>
+    <div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div>
+    ${filtered().map(t=>jobCard(t,false)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Pulsa + para crear una toma de medidas.</p></div>`}`;
+  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
+  document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
+  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+}
 
+function jobCard(t,big){
+  return `<article class="card job ${big?"big":""}" data-id="${t.id}">
+    <div style="display:flex;justify-content:space-between;gap:8px"><div>
+      <span class="fase">${FASES[t.fase]}</span><h3>${escapeHtml(t.cliente)}</h3>
+      ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
+      <div class="meta">${escapeHtml([t.direccion,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
+      <div class="meta">${fmtCita(t)}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</div>
+    </div><span class="badge s-${t.estado}">${ESTADOS[t.estado]}</span></div></article>`;
+}
+function citasSemana(){
+  const start=ymd(state.weekStart), end=ymd(addDays(state.weekStart,6));
+  return state.trabajos.filter(t=>t.cita_fecha && t.cita_fecha>=start && t.cita_fecha<=end)
+    .sort((a,b)=>(a.cita_fecha+a.cita_hora).localeCompare(b.cita_fecha+b.cita_hora));
+}
+function weekHTML(){
+  const today=ymd(new Date()); const start=state.weekStart; const fin=addDays(start,6);
+  const cols=[];
+  for(let i=0;i<7;i++){
+    const d=addDays(start,i); const key=ymd(d);
+    const items=state.trabajos.filter(t=>t.cita_fecha===key).sort((a,b)=>(a.cita_hora||"").localeCompare(b.cita_hora||""));
+    cols.push(`<div class="day ${key===today?"today":""}"><h4>${DIAS[i]} ${d.getDate()}</h4>
+      ${items.map(t=>`<button class="pill ${t.fase==="instalacion"?"inst":""}" data-id="${t.id}">${t.cita_hora||""} ${escapeHtml(t.cliente)} · ${FASES[t.fase]}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</button>`).join("") || `<span class="meta">Libre</span>`}</div>`);
+  }
+  return `<div class="weekbar"><button class="btn btn-ghost" id="prevS">←</button><strong>${start.getDate()}/${start.getMonth()+1} — ${fin.getDate()}/${fin.getMonth()+1}</strong>
+    <button class="btn btn-ghost" id="hoyS">Esta semana</button><button class="btn btn-ghost" id="nextS">→</button></div><div class="week">${cols.join("")}</div>`;
+}
+function bindWeek(){
+  $("#prevS").onclick=()=>{state.weekStart=addDays(state.weekStart,-7); render();};
+  $("#nextS").onclick=()=>{state.weekStart=addDays(state.weekStart,7); render();};
+  $("#hoyS").onclick=()=>{state.weekStart=monday(new Date()); render();};
+  document.querySelectorAll(".pill").forEach(b=>b.onclick=()=>openJob(b.dataset.id));
+}
+function instOptions(selected=""){
+  return `<option value="">Elegir instalador…</option>`+(state.instaladores||[]).map(u=>`<option value="${u.usuario}" ${u.usuario===selected?"selected":""}>${escapeHtml(u.nombre)}</option>`).join("");
+}
 
-def asignar(trabajo: dict, inst: dict, user: dict, db: dict, fase_txt: str) -> None:
-    trabajo["asignado_a"] = inst["usuario"]
-    trabajo["asignado_nombre"] = inst["nombre"]
-    if trabajo["estado"] == "nueva":
-        trabajo["estado"] = "asignada"
-    add_msg(trabajo, user, f"{fase_txt.capitalize()} enviada a {inst['nombre']}.")
-    add_alerta(
-        db,
-        para=inst["usuario"],
-        texto=f"Tienes un trabajo nuevo: {trabajo['cliente']} ({fase_txt}).",
-        trabajo_id=trabajo["id"],
-        tipo="asignada",
-    )
+function openNuevo(){
+  const dlg=$("#dlg");
+  dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
+    <label>Qué hay que hacer</label><select name="fase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option></select>
+    <label>Cliente</label><input name="cliente" required placeholder="Quién te encarga el trabajo">
+    <label>Cliente final</label><input name="cliente_final" placeholder="Quién vive en la casa / destinatario">
+    <div class="row"><div><label>Teléfono</label><input name="telefono" type="tel"></div><div><label>Tipo</label><input name="tipo"></div></div>
+    <label>Dirección</label><input name="direccion" placeholder="Calle y número">
+    <label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad">
+    <label>Medidas</label><textarea name="medidas"></textarea>
+    <label>Foto o PDF</label>
+    <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
+    <label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>
+    <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
+    <div class="error" id="errN"></div></form>`;
+  dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
+  $("#formNuevo").onsubmit=async e=>{
+    e.preventDefault();
+    try{
+      await api("/api/trabajos",{method:"POST", form:true, body:new FormData(e.target)});
+      dlg.close(); await load();
+    }catch(err){$("#errN").textContent=err.message;}
+  };
+}
 
+function openEquipo(){
+  const dlg=$("#dlg"); const list=state.instaladores||[];
+  const yo=state.user||{};
+  dlg.innerHTML=`<div class="sheet"><h2>Equipo y cuenta</h2>
+    <h3>Tu nombre de dueño</h3>
+    <form id="formYo">
+      <label>Cómo quieres que se te vea</label>
+      <input name="nombre" required value="${escapeHtml(yo.nombre||"Dueño")}">
+      <label>Nueva contraseña tuya (déjala vacía si no la cambias)</label>
+      <input name="password" placeholder="Mínimo 4 caracteres">
+      <button class="btn btn-primary btn-full" style="margin-top:12px" type="submit">Guardar mi cuenta</button>
+      <div class="error" id="errYo"></div>
+    </form>
+    <h3 style="margin-top:22px">Instaladores</h3>
+    ${list.map(u=>`<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div><b>${escapeHtml(u.nombre)}</b><div class="meta">Usuario: ${escapeHtml(u.usuario)}</div></div>
+        <button class="btn btn-danger" data-del="${u.usuario}">Quitar</button>
+      </div>
+      <form data-pass="${u.usuario}" style="margin-top:8px">
+        <label>Nueva contraseña</label>
+        <div class="row"><input name="password" required placeholder="Nueva clave"><button class="btn btn-ghost" type="submit">Cambiar</button></div>
+      </form>
+    </div>`).join("")||`<p class="meta">Todavía no hay instaladores.</p>`}
+    <form id="formInst" style="margin-top:16px">
+      <label>Nombre del instalador</label><input name="nombre" required placeholder="Ej. Juan">
+      <label>Contraseña sencilla</label><input name="password" required placeholder="Ej. juan123">
+      <button class="btn btn-primary btn-full" style="margin-top:12px" type="submit">Añadir instalador</button>
+      <div class="error" id="errE"></div></form>
+    <button class="btn btn-ghost btn-full" style="margin-top:10px" id="cerrarE">Cerrar</button></div>`;
+  dlg.showModal(); $("#cerrarE").onclick=()=>dlg.close();
+  $("#formYo").onsubmit=async e=>{
+    e.preventDefault();
+    const fd=Object.fromEntries(new FormData(e.target));
+    try{await api("/api/usuarios/"+yo.usuario,{method:"PATCH",body:fd}); await load(); openEquipo(); alert("Cuenta actualizada");}
+    catch(err){$("#errYo").textContent=err.message;}
+  };
+  $("#formInst").onsubmit=async e=>{
+    e.preventDefault();
+    try{const r=await api("/api/usuarios",{method:"POST",body:Object.fromEntries(new FormData(e.target))}); alert("Creado.\nUsuario: "+r.usuario.usuario+"\nContraseña: "+r.usuario.password); await load(); openEquipo();}
+    catch(err){$("#errE").textContent=err.message;}
+  };
+  dlg.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    if(!confirm("¿Quitar a este instalador?"))return;
+    try{await api("/api/usuarios/"+b.dataset.del,{method:"DELETE"}); await load(); openEquipo();}
+    catch(err){alert(err.message);}
+  });
+  dlg.querySelectorAll("[data-pass]").forEach(f=>f.onsubmit=async e=>{
+    e.preventDefault();
+    const clave=e.target.password.value;
+    try{await api("/api/usuarios/"+f.dataset.pass,{method:"PATCH",body:{password:clave}}); alert("Contraseña cambiada"); e.target.reset(); await load(); openEquipo();}
+    catch(err){alert(err.message);}
+  });
+}
 
-@app.route("/")
-def index():
-    return render_template("index.html")
+function openAlertas(){
+  const dlg=$("#dlgAlertas"); const items=state.alertas||[];
+  dlg.innerHTML=`<div class="sheet"><h2>Avisos</h2>
+    ${items.length?items.map(a=>`<div class="alert-item" data-id="${a.id}" data-tid="${a.trabajo_id}">${escapeHtml(a.texto)}<div class="meta">${fmtFecha(a.fecha)}</div></div>`).join(""):`<p class="meta">No hay avisos.</p>`}
+    <div class="actions"><button class="btn btn-ghost" id="leerTodas">Ya los he visto</button><button class="btn btn-ghost" id="cerrarA">Cerrar</button></div></div>`;
+  dlg.showModal(); $("#cerrarA").onclick=()=>dlg.close();
+  $("#leerTodas").onclick=async()=>{await api("/api/alertas/leer",{method:"POST",body:{}}); await load(); openAlertas();};
+  dlg.querySelectorAll(".alert-item").forEach(el=>el.onclick=async()=>{ await api("/api/alertas/leer",{method:"POST",body:{id:el.dataset.id}}); dlg.close(); if(el.dataset.tid) openJob(el.dataset.tid); await load(); });
+}
 
+function openJob(id){
+  const t=state.trabajos.find(x=>x.id===id); if(!t) return; state.sel=id;
+  const dlg=$("#dlg"); const sitio=[t.direccion,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
+  const simple=esInst(); const fotos=t.fotos||[];
+  dlg.innerHTML=`<div class="sheet">
+    <span class="fase">${FASES[t.fase]}</span>
+    <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
+    ${t.cliente_final?`<p class="meta">Cliente final: <b>${escapeHtml(t.cliente_final)}</b></p>`:""}
+    <p class="meta">${escapeHtml(sitio||"")}</p>
+    <p class="meta">Día: <b>${fmtCita(t)}</b>${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</p>
+    ${t.tipo?`<p class="detalle"><b>Tipo:</b> ${escapeHtml(t.tipo)}</p>`:""}
+    ${t.medidas?`<p class="detalle"><b>Medidas:</b> ${escapeHtml(t.medidas)}</p>`:""}
+    <div class="stack">
+      ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar al cliente</a>`:""}
+      ${maps?`<a class="btn btn-ghost btn-xl" href="${maps}" target="_blank" rel="noopener">Ver en el mapa</a>`:""}
+    </div>
+    ${!simple && t.estado!=="finalizada"?`<label>Mandar a</label><select id="selInst">${instOptions(t.asignado_a||"")}</select>
+      <button class="btn btn-primary btn-xl" id="enviar">Enviar a este instalador</button>`:""}
+    ${t.estado!=="finalizada"?`<button class="btn btn-ghost btn-xl" id="cita">Poner día y hora</button>
+      <div id="citaBox" hidden>
+        <label>Día</label><input type="date" id="citaFecha" value="${t.cita_fecha||""}">
+        <label>Hora</label><input type="time" id="citaHora" value="${t.cita_hora||""}">
+        <label>Nota</label><input id="citaNota" value="${escapeHtml(t.cita_nota||"")}">
+        <button class="btn btn-primary btn-xl" id="guardarCita">Guardar cita</button>
+      </div>
+      ${t.estado!=="nueva"?`<button class="btn btn-sage btn-xl" id="empezar">Marcar EMPEZADA</button>`:""}
+      <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>`:""}
+    <h3 style="margin-top:18px">Fotos y PDF</h3>
+    <div class="photos">${fotos.filter(f=>!esPdf(f)).map((f,i)=>`<img src="${f.url}" alt="" data-foto="${i}">`).join("")||""}</div>
+    ${listaPdfs(t).map((a,i)=>`<button type="button" class="pdf-btn" data-pdf="${i}">📄 ${escapeHtml(a.nombre||"documento.pdf")}<span>Abrir</span></button>`).join("")}
+    ${!(fotos.filter(f=>!esPdf(f)).length||listaPdfs(t).length)?`<p class="meta">Sin archivos</p>`:""}
+    <form id="formFoto">
+      <label>Añadir foto o PDF</label>
+      <select name="momento">${t.fase==="instalacion"?`<option value="inicio">Del empezado</option><option value="fin">Del acabado</option><option value="general">Otro</option>`:`<option value="medidas">De las medidas</option><option value="general">Otro</option>`}</select>
+      <input type="file" name="foto" accept="image/*,.pdf,application/pdf" style="margin-top:8px">
+      <button class="btn btn-primary btn-xl" type="submit">Subir archivo</button>
+      <div class="error" id="errF"></div>
+    </form>
+    ${simple?"":`<h3 style="margin-top:18px">Notas</h3>
+      <div class="msgs">${(t.mensajes||[]).map(m=>`<div class="msg ${m.rol}"><div class="meta">${escapeHtml(m.autor)} · ${fmtFecha(m.fecha)}</div>${escapeHtml(m.texto)}</div>`).join("")}</div>
+      <form id="formMsg" class="actions"><input name="texto" required placeholder="Nota"><button class="btn btn-primary" type="submit">Enviar</button></form>
+      <button class="btn btn-danger btn-xl" id="borrar">Borrar trabajo</button>`}
+    <button class="btn btn-ghost btn-xl" id="cerrar">Cerrar</button>
+  </div>`;
+  dlg.showModal();
+  $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+  const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
+  const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
+  const gc=$("#guardarCita"); if(gc) gc.onclick=()=>patch(t.id,{concertar_cita:true,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
+  const em=$("#empezar"); if(em) em.onclick=()=>patch(t.id,{estado:"en_curso"});
+  const fin=$("#fin"); if(fin) fin.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar?"))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
+  const fm=$("#formMsg"); if(fm) fm.onsubmit=async e=>{e.preventDefault(); await api(`/api/trabajos/${t.id}/mensajes`,{method:"POST",body:{texto:e.target.texto.value}}); await load(); openJob(t.id);};
+  $("#formFoto").onsubmit=async e=>{
+    e.preventDefault(); const fd=new FormData(e.target);
+    if(!fd.get("foto")||!fd.get("foto").size){$("#errF").textContent="Elige una foto o un PDF"; return;}
+    try{await api(`/api/trabajos/${t.id}/fotos`,{method:"POST",form:true,body:fd}); await load(); openJob(t.id);}catch(err){$("#errF").textContent=err.message;}
+  };
+  const pdfs=listaPdfs(t);
+  dlg.querySelectorAll("[data-pdf]").forEach(b=>b.onclick=ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    abrirAdjunto(pdfs[Number(b.dataset.pdf)]);
+  });
+  const soloFotos=fotos.filter(f=>!esPdf(f));
+  dlg.querySelectorAll("[data-foto]").forEach(img=>img.onclick=ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    abrirAdjunto(soloFotos[Number(img.dataset.foto)]);
+  });
+}
 
-@app.get("/uploads/<path:filename>")
-@login_required
-def uploads(filename: str):
-    return send_from_directory(UPLOAD_DIR, Path(filename).name)
+function esPdf(f){
+  const n=(f.nombre||f.name||f.url||"").toLowerCase();
+  const t=(f.tipo||f.mime||"").toLowerCase();
+  return t==="pdf" || t.includes("pdf") || n.endsWith(".pdf");
+}
+function listaPdfs(t){
+  const deArchivos=(t.archivos||[]).filter(esPdf);
+  const deFotos=(t.fotos||[]).filter(esPdf);
+  const seen=new Set();
+  return [...deArchivos,...deFotos].filter(a=>{
+    const k=a.url||a.nombre; if(seen.has(k)) return false; seen.add(k); return true;
+  });
+}
+function abrirAdjunto(a){
+  if(!a||!a.url) return;
+  let visor=$("#visorPdf");
+  if(!visor){
+    visor=document.createElement("dialog");
+    visor.id="visorPdf";
+    document.body.appendChild(visor);
+  }
+  const esImagen=!esPdf(a);
+  const cuerpo=esImagen
+    ?`<img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.nombre||"foto")}">`
+    :`<iframe src="${escapeHtml(a.url)}" title="PDF"></iframe>`;
+  visor.innerHTML=`<div class="visor-box">
+    <div class="visor-bar">
+      <strong>${escapeHtml(a.nombre||(esImagen?"Foto":"documento.pdf"))}</strong>
+      <button class="btn btn-primary" type="button" id="cerrarPdf">Cerrar</button>
+    </div>
+    ${cuerpo}
+  </div>`;
+  visor.showModal();
+  const cerrar=()=>{visor.close(); visor.innerHTML="";};
+  $("#cerrarPdf").onclick=cerrar;
+  visor.addEventListener("cancel", e=>{e.preventDefault(); cerrar();},{once:true});
+}
 
-
-@app.get("/api/login-opciones")
-def api_login_opciones():
-    db = load_db()
-    return jsonify(
-        {
-            "usuarios": [
-                {"usuario": u["usuario"], "nombre": u["nombre"], "rol": u["rol"]}
-                for u in db["usuarios"]
-            ]
-        }
-    )
-
-
-@app.post("/api/login")
-def api_login():
-    body = request.get_json(silent=True) or {}
-    db = load_db()
-    usuario = (body.get("usuario") or "").strip().lower()
-    password = body.get("password") or ""
-    user = find_user(db, usuario)
-    if not user or user["password"] != password:
-        return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
-    session["usuario"] = user["usuario"]
-    return jsonify({"ok": True, "user": public_user(user)})
-
-
-@app.post("/api/logout")
-def api_logout():
-    session.clear()
-    return jsonify({"ok": True})
-
-
-@app.get("/api/red")
-@login_required
-def api_red():
-    ips = []
-    try:
-        hostname = socket.gethostname()
-        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
-            ip = info[4][0]
-            if ip and not ip.startswith("127.") and ip not in ips:
-                ips.append(ip)
-    except OSError:
-        pass
-    if not ips:
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ips.append(s.getsockname()[0])
-            s.close()
-        except OSError:
-            pass
-    port = request.host.split(":")[-1] if ":" in request.host else "5000"
-    enlaces = [f"http://{ip}:{port}" for ip in ips]
-    return jsonify({"ips": ips, "enlaces": enlaces, "puerto": port})
-
-
-@app.get("/api/me")
-def api_me():
-    if "usuario" not in session:
-        return jsonify({"user": None})
-    db = load_db()
-    return jsonify({"user": current_user(), "instaladores": [public_user(u) for u in instaladores(db)]})
-
-
-@app.get("/api/usuarios")
-@login_required
-def api_usuarios():
-    if current_user()["rol"] != "dueno":
-        return jsonify({"error": "Solo el dueño"}), 403
-    db = load_db()
-    return jsonify({"usuarios": [public_user(u) for u in db["usuarios"]]})
-
-
-@app.post("/api/usuarios")
-@login_required
-def api_crear_usuario():
-    if current_user()["rol"] != "dueno":
-        return jsonify({"error": "Solo el dueño puede añadir instaladores"}), 403
-    body = request.get_json(silent=True) or {}
-    nombre = (body.get("nombre") or "").strip()
-    password = (body.get("password") or "").strip()
-    if not nombre:
-        return jsonify({"error": "Pon el nombre del instalador"}), 400
-    if len(password) < 4:
-        return jsonify({"error": "La contraseña debe tener al menos 4 caracteres"}), 400
-    db = load_db()
-    base = slug_usuario(nombre)
-    usuario = base
-    n = 2
-    while find_user(db, usuario):
-        usuario = f"{base}{n}"
-        n += 1
-    nuevo = {"usuario": usuario, "password": password, "nombre": nombre, "rol": "instalador"}
-    db["usuarios"].append(nuevo)
-    save_db(db)
-    return jsonify({"usuario": {**public_user(nuevo), "password": password}})
-
-
-@app.patch("/api/usuarios/<usuario>")
-@login_required
-def api_editar_usuario(usuario: str):
-    yo = current_user()
-    if yo["rol"] != "dueno" and yo["usuario"] != usuario:
-        return jsonify({"error": "No puedes cambiar esta cuenta"}), 403
-    body = request.get_json(silent=True) or {}
-    db = load_db()
-    u = find_user(db, usuario)
-    if not u:
-        return jsonify({"error": "No existe"}), 404
-    if yo["rol"] != "dueno" and u["usuario"] != yo["usuario"]:
-        return jsonify({"error": "No puedes cambiar esta cuenta"}), 403
-    nombre = (body.get("nombre") or "").strip()
-    password = (body.get("password") or "").strip()
-    if nombre:
-        if u["rol"] == "dueno" or yo["rol"] == "dueno":
-            u["nombre"] = nombre
-    if password:
-        if len(password) < 4:
-            return jsonify({"error": "La contraseña debe tener al menos 4 caracteres"}), 400
-        u["password"] = password
-    save_db(db)
-    return jsonify({"usuario": public_user(u)})
-
-
-@app.delete("/api/usuarios/<usuario>")
-@login_required
-def api_borrar_usuario(usuario: str):
-    if current_user()["rol"] != "dueno":
-        return jsonify({"error": "Solo el dueño"}), 403
-    db = load_db()
-    u = find_user(db, usuario)
-    if not u:
-        return jsonify({"error": "No existe"}), 404
-    if u["rol"] == "dueno":
-        return jsonify({"error": "No se puede borrar al dueño"}), 400
-    db["usuarios"] = [x for x in db["usuarios"] if x["usuario"] != u["usuario"]]
-    save_db(db)
-    return jsonify({"ok": True})
-
-
-@app.get("/api/trabajos")
-@login_required
-def api_listar():
-    db = load_db()
-    user = current_user()
-    trabajos = db["trabajos"]
-    if user["rol"] == "instalador":
-        trabajos = [t for t in trabajos if t.get("asignado_a") == user["usuario"] and t.get("estado") != "nueva"]
-    trabajos = sorted(trabajos, key=lambda t: (t.get("cita_fecha") or "9999", t.get("cita_hora") or "", t.get("creado") or ""))
-    return jsonify(
-        {
-            "trabajos": trabajos,
-            "alertas": alertas_de(db, user),
-            "user": user,
-            "instaladores": [public_user(u) for u in instaladores(db)],
-        }
-    )
-
-
-@app.post("/api/trabajos")
-@login_required
-def api_crear():
-    user = current_user()
-    if user["rol"] != "dueno":
-        return jsonify({"error": "Solo el dueño puede crear trabajos"}), 403
-    if request.files or request.form:
-        body = request.form.to_dict()
-        files = request.files.getlist("archivos") or request.files.getlist("archivo")
-    else:
-        body = request.get_json(silent=True) or {}
-        files = []
-    if not (body.get("cliente") or "").strip():
-        return jsonify({"error": "El nombre del cliente es obligatorio"}), 400
-    db = load_db()
-    inst = find_user(db, body.get("asignado_a") or "")
-    if inst and inst["rol"] == "instalador":
-        body["asignado_a"] = inst["usuario"]
-        body["asignado_nombre"] = inst["nombre"]
-    trabajo = nuevo_trabajo(user, body, fase=body.get("fase") or "medidas")
-    if trabajo["notas_iniciales"]:
-        add_msg(trabajo, user, trabajo["notas_iniciales"])
-    for f in files:
-        if f and f.filename:
-            try:
-                guardar_adjunto(f, trabajo, user)
-            except ValueError as err:
-                return jsonify({"error": str(err)}), 400
-    if inst and inst["rol"] == "instalador":
-        asignar(trabajo, inst, user, db, "toma de medidas" if trabajo["fase"] == "medidas" else "instalación")
-    db["trabajos"].append(trabajo)
-    save_db(db)
-    return jsonify({"trabajo": trabajo})
-
-
-@app.patch("/api/trabajos/<trabajo_id>")
-@login_required
-def api_actualizar(trabajo_id: str):
-    user = current_user()
-    body = request.get_json(silent=True) or {}
-    db = load_db()
-    trabajo = find_trabajo(db, trabajo_id)
-    if not trabajo:
-        return jsonify({"error": "Trabajo no encontrado"}), 404
-    if user["rol"] == "instalador" and trabajo.get("asignado_a") != user["usuario"]:
-        return jsonify({"error": "Este trabajo no es tuyo"}), 403
-
-    fase_txt = "toma de medidas" if trabajo.get("fase") == "medidas" else "instalación"
-    instalacion_creada = None
-
-    if user["rol"] == "dueno" and body.get("asignado_a"):
-        inst = find_user(db, body.get("asignado_a"))
-        if not inst or inst["rol"] != "instalador":
-            return jsonify({"error": "Instalador no válido"}), 400
-        asignar(trabajo, inst, user, db, fase_txt)
-
-    if "estado" in body:
-        nuevo = body["estado"]
-        if nuevo not in STATUSES:
-            return jsonify({"error": "Estado no válido"}), 400
-        anterior = trabajo["estado"]
-        trabajo["estado"] = nuevo
-        if nuevo == "en_curso" and anterior != "en_curso":
-            add_msg(trabajo, user, f"Empezado ({fase_txt}).")
-            add_alerta(
-                db,
-                para="dueno",
-                texto=f"{user['nombre']} ha empezado la {fase_txt} de {trabajo['cliente']}.",
-                trabajo_id=trabajo["id"],
-                tipo="empezada",
-            )
-        if nuevo == "finalizada" and anterior != "finalizada":
-            add_msg(trabajo, user, f"Finalizado ({fase_txt}).")
-            add_alerta(
-                db,
-                para="dueno",
-                texto=f"{user['nombre']} ha terminado la {fase_txt} de {trabajo['cliente']}.",
-                trabajo_id=trabajo["id"],
-                tipo="finalizada",
-            )
-            if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id"):
-                inst_job = crear_instalacion_desde(trabajo, user)
-                trabajo["relacionado_id"] = inst_job["id"]
-                inst_job["relacionado_id"] = trabajo["id"]
-                db["trabajos"].append(inst_job)
-                instalacion_creada = inst_job
-                add_msg(trabajo, user, "Se ha creado la instalación de este cliente.")
-                add_alerta(
-                    db,
-                    para="dueno",
-                    texto=f"Medidas de {trabajo['cliente']} listas. Falta enviar la instalación.",
-                    trabajo_id=inst_job["id"],
-                    tipo="instalacion_lista",
-                )
-
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "telefono", "direccion", "localidad", "tipo", "medidas"):
-        if field in body and user["rol"] == "dueno":
-            trabajo[field] = (body.get(field) or "").strip()
-        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota"):
-            trabajo[field] = (body.get(field) or "").strip()
-
-    if body.get("concertar_cita"):
-        if not (body.get("cita_fecha") or trabajo.get("cita_fecha")):
-            return jsonify({"error": "Indica el día de la cita"}), 400
-        trabajo["cita_fecha"] = (body.get("cita_fecha") or trabajo.get("cita_fecha") or "").strip()
-        trabajo["cita_hora"] = (body.get("cita_hora") or trabajo.get("cita_hora") or "").strip()
-        trabajo["cita_nota"] = (body.get("cita_nota") or trabajo.get("cita_nota") or "").strip()
-        if trabajo["estado"] in ("nueva", "asignada"):
-            trabajo["estado"] = "cita"
-        cuando = f"{trabajo['cita_fecha']} {trabajo['cita_hora']}".strip()
-        extra = f" — {trabajo['cita_nota']}" if trabajo["cita_nota"] else ""
-        add_msg(trabajo, user, f"Cita: {cuando}{extra}")
-        add_alerta(
-            db,
-            para="dueno",
-            texto=f"{user['nombre']} ha quedado con {trabajo['cliente']} el {cuando} ({fase_txt}).",
-            trabajo_id=trabajo["id"],
-            tipo="cita",
-        )
-        if trabajo.get("asignado_a") and user["rol"] == "dueno":
-            add_alerta(
-                db,
-                para=trabajo["asignado_a"],
-                texto=f"Cita con {trabajo['cliente']} el {cuando} ({fase_txt}).",
-                trabajo_id=trabajo["id"],
-                tipo="cita",
-            )
-
-    trabajo["actualizado"] = now_iso()
-    save_db(db)
-    return jsonify({"trabajo": trabajo, "instalacion_creada": instalacion_creada})
-
-
-@app.post("/api/trabajos/<trabajo_id>/mensajes")
-@login_required
-def api_mensaje(trabajo_id: str):
-    user = current_user()
-    body = request.get_json(silent=True) or {}
-    texto = (body.get("texto") or "").strip()
-    if not texto:
-        return jsonify({"error": "Escribe una nota"}), 400
-    db = load_db()
-    trabajo = find_trabajo(db, trabajo_id)
-    if not trabajo:
-        return jsonify({"error": "Trabajo no encontrado"}), 404
-    add_msg(trabajo, user, texto)
-    trabajo["actualizado"] = now_iso()
-    save_db(db)
-    return jsonify({"trabajo": trabajo})
-
-
-@app.post("/api/trabajos/<trabajo_id>/fotos")
-@login_required
-def api_foto(trabajo_id: str):
-    user = current_user()
-    db = load_db()
-    trabajo = find_trabajo(db, trabajo_id)
-    if not trabajo:
-        return jsonify({"error": "Trabajo no encontrado"}), 404
-    file = request.files.get("foto") or request.files.get("archivo")
-    if not file or not file.filename:
-        return jsonify({"error": "No hay archivo"}), 400
-    momento = (request.form.get("momento") or "general").strip()
-    try:
-        item = guardar_adjunto(file, trabajo, user, momento=momento)
-    except ValueError as err:
-        return jsonify({"error": str(err)}), 400
-    etiqueta = "PDF" if item["tipo"] == "pdf" else "Foto"
-    add_msg(trabajo, user, f"{etiqueta} añadido.")
-    if user["rol"] == "instalador":
-        add_alerta(
-            db,
-            para="dueno",
-            texto=f"{user['nombre']} ha subido un archivo de {trabajo['cliente']}.",
-            trabajo_id=trabajo["id"],
-            tipo="foto",
-        )
-    trabajo["actualizado"] = now_iso()
-    save_db(db)
-    return jsonify({"archivo": item, "trabajo": trabajo})
-
-
-@app.delete("/api/trabajos/<trabajo_id>/fotos/<foto_id>")
-@login_required
-def api_borrar_foto(trabajo_id: str, foto_id: str):
-    user = current_user()
-    db = load_db()
-    trabajo = find_trabajo(db, trabajo_id)
-    if not trabajo:
-        return jsonify({"error": "Trabajo no encontrado"}), 404
-    foto = next((f for f in trabajo["fotos"] if f["id"] == foto_id), None)
-    if not foto:
-        return jsonify({"error": "Foto no encontrada"}), 404
-    trabajo["fotos"] = [f for f in trabajo["fotos"] if f["id"] != foto_id]
-    path = UPLOAD_DIR / Path(foto.get("archivo", "")).name
-    if path.exists():
-        try:
-            path.unlink()
-        except OSError:
-            pass
-    trabajo["actualizado"] = now_iso()
-    save_db(db)
-    return jsonify({"ok": True, "trabajo": trabajo})
-
-
-@app.post("/api/alertas/leer")
-@login_required
-def api_leer_alertas():
-    user = current_user()
-    body = request.get_json(silent=True) or {}
-    alerta_id = body.get("id")
-    db = load_db()
-    for a in alertas_de(db, user):
-        if alerta_id and a["id"] != alerta_id:
-            continue
-        a["leida"] = True
-    save_db(db)
-    return jsonify({"ok": True})
-
-
-@app.delete("/api/trabajos/<trabajo_id>")
-@login_required
-def api_borrar(trabajo_id: str):
-    user = current_user()
-    if user["rol"] != "dueno":
-        return jsonify({"error": "Solo el dueño puede borrar"}), 403
-    db = load_db()
-    trabajo = find_trabajo(db, trabajo_id)
-    if not trabajo:
-        return jsonify({"error": "Trabajo no encontrado"}), 404
-    for foto in trabajo.get("fotos", []):
-        path = UPLOAD_DIR / Path(foto.get("archivo", "")).name
-        if path.exists():
-            try:
-                path.unlink()
-            except OSError:
-                pass
-    db["trabajos"] = [t for t in db["trabajos"] if t["id"] != trabajo_id]
-    save_db(db)
-    return jsonify({"ok": True})
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+async function patch(id,body){
+  const res=await api("/api/trabajos/"+id,{method:"PATCH",body});
+  await load();
+  if(res.instalacion_creada){toast("Medidas terminadas. Ya está creada la instalación."); openJob(res.instalacion_creada.id);}
+  else openJob(id);
+}
+function toast(t){document.querySelectorAll(".toast").forEach(n=>n.remove()); const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),4000);}
+function pedirAvisos(){if("Notification" in window && Notification.permission==="default") Notification.requestPermission().catch(()=>{});}
+function avisar(prev){(state.alertas||[]).filter(a=>!a.leida && !prev.has(a.id)).forEach(a=>{toast(a.texto); if("Notification" in window && Notification.permission==="granted"){try{new Notification("Agenda Cortinas",{body:a.texto});}catch{}}});}
+async function load(){
+  const prev=new Set((state.alertas||[]).map(a=>a.id));
+  const data=await api("/api/trabajos");
+  state.trabajos=data.trabajos; state.alertas=data.alertas||[]; state.user=data.user; state.instaladores=data.instaladores||[];
+  try { const red = await api("/api/red"); state.enlaces = red.enlaces || []; } catch {}
+  avisar(prev); render();
+}
+async function boot(){
+  try{const me=await api("/api/me"); state.user=me.user; state.instaladores=me.instaladores||[]; if(state.user){pedirAvisos(); await load();} else render();}
+  catch{render();}
+  setInterval(()=>{if(state.user && !$("#dlg")?.open && !$("#dlgAlertas")?.open) load().catch(()=>{});},20000);
+}
+boot();
+</script>
+</body>
+</html>
