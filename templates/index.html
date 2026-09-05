@@ -177,9 +177,10 @@ function bindCommon(){
 }
 
 function renderInstalador(){
-  const pendientes=state.trabajos.filter(t=>t.estado==="asignada");
-  const semana=citasSemana();
+  const pendientes=state.trabajos.filter(t=>t.estado==="asignada"||t.estado==="cita");
+  const semana=citasSemana().filter(t=>t.estado!=="finalizada");
   const enCurso=state.trabajos.filter(t=>t.estado==="en_curso");
+  const hechas=state.trabajos.filter(t=>t.estado==="finalizada");
   $("#app").innerHTML=`${header()}
     <div class="tabs">
       <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Mis trabajos</button>
@@ -191,10 +192,12 @@ function renderInstalador(){
   const main=$("#main");
   if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
   main.innerHTML=`
-    ${pendientes.length?`<h2 style="margin:8px 0">Por citar</h2>${pendientes.map(t=>jobCard(t,true)).join("")}`:""}
+    ${pendientes.length?`<h2 style="margin:8px 0">Pendientes</h2>${pendientes.map(t=>jobCard(t,true)).join("")}`:""}
     ${enCurso.length?`<h2 style="margin:16px 0 8px">En marcha</h2>${enCurso.map(t=>jobCard(t,true)).join("")}`:""}
     <h2 style="margin:16px 0 8px">Citas de esta semana</h2>
-    ${semana.length?semana.map(t=>jobCard(t,true)).join(""):`<div class="card empty">No hay citas esta semana.</div>`}`;
+    ${semana.length?semana.map(t=>jobCard(t,true)).join(""):`<div class="card empty">No hay citas esta semana.</div>`}
+    <h2 style="margin:16px 0 8px">Terminadas</h2>
+    ${hechas.length?hechas.map(t=>jobCard(t,true)).join(""):`<div class="card empty">Aún no hay trabajos terminados.</div>`}`;
   document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
 }
 
