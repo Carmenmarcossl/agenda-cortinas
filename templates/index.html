@@ -67,6 +67,7 @@
     .s-en_curso{background:#e2eee6;color:#2f5a40}
     .s-finalizada{background:#e8e4df;color:#5b524a}
     .s-incidencia{background:#f8e0d6;color:#8a2f12}
+    .s-facturado{background:#dce8f4;color:#1f4e79}
     .fase{display:inline-block;font-size:12px;font-weight:800;color:#9a3f16;text-transform:uppercase;margin-right:6px}
     .empty{text-align:center;padding:40px 16px;color:var(--muted)}
     dialog{border:0;padding:0;background:transparent;max-width:640px;width:calc(100% - 18px)}
@@ -110,7 +111,7 @@
 <body>
 <div id="app" class="wrap"></div>
 <script>
-const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",incidencia:"Incidencia",finalizada:"Terminada"};
+const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",incidencia:"Incidencia",finalizada:"Terminada",facturado:"Facturada"};
 const FASES = {medidas:"Medir",instalacion:"Instalar"};
 const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
@@ -134,7 +135,7 @@ async function api(path, opts={}) {
 function filtered(){
   return state.trabajos.filter(t=>{
     if(state.fase!=="todas" && t.fase!==state.fase) return false;
-    if(state.filtro==="activos") return t.estado!=="finalizada";
+    if(state.filtro==="activos") return t.estado!=="finalizada" && t.estado!=="facturado";
     if(state.filtro==="todos") return true;
     if(state.filtro==="finalizada") return t.estado==="finalizada" || t.estado==="incidencia";
     return t.estado===state.filtro;
@@ -183,7 +184,7 @@ function bindCommon(){
 }
 
 function chipsFiltro(){
-  return `<div class="chips">${[["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["todos","Todo"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div>
+  return `<div class="chips">${[["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"],["todos","Todo"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div>
     <div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div>`;
 }
 function bindFiltros(){
@@ -197,8 +198,10 @@ function renderInstalador(){
       <button class="btn btn-ghost ${state.vista==="lista"?"on":""}" data-v="lista">Mis trabajos</button>
       <button class="btn btn-ghost ${state.vista==="semana"?"on":""}" data-v="semana">Semana</button>
     </div>
-    <div id="main"></div><dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
-  bindCommon();
+    <div id="main"></div>
+    <button class="fab" id="fab">+</button>
+    <dialog id="dlg"></dialog><dialog id="dlgAlertas"></dialog><dialog id="visorPdf"></dialog>`;
+  bindCommon(); $("#fab").onclick=openNuevo;
   document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{state.vista=b.dataset.v; render();});
   const main=$("#main");
   if(state.vista==="semana"){main.innerHTML=weekHTML(); bindWeek(); return;}
@@ -295,7 +298,7 @@ function openNuevo(){
     <label>Medidas</label><textarea name="medidas"></textarea>
     <label>Foto o PDF</label>
     <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
-    <label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>
+    ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>`}
     <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
     <div class="error" id="errN"></div></form>`;
   dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
@@ -307,7 +310,14 @@ function openNuevo(){
   };
   $("#formNuevo").onsubmit=async e=>{
     e.preventDefault();
+    const nombre=(inC && inC.value || "").trim();
+    if(!nombre){
+      $("#errN").textContent="Falta el nombre del Cliente (arriba del formulario). El cliente final no sirve.";
+      if(inC){ inC.focus(); inC.scrollIntoView({block:"center"}); }
+      return;
+    }
     try{
+      $("#errN").textContent="Guardando…";
       await api("/api/trabajos",{method:"POST", form:true, body:new FormData(e.target)});
       dlg.close(); await load();
     }catch(err){$("#errN").textContent=err.message;}
@@ -448,6 +458,9 @@ function openJob(id){
       <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>
       <button class="btn btn-ghost btn-xl" id="cancelarInc">No era incidencia: está terminada</button>`:""}
     ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
+    ${!simple && (t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo al cliente</button>`:""}
+    ${!simple && t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-sage btn-xl" id="facturar">Marcar FACTURADA</button>`:""}
+    ${!simple && t.estado==="facturado"?`<button class="btn btn-ghost btn-xl" id="deshacerFac">Quitar facturada</button>`:""}
     ${t.estado==="en_curso"?`<button class="btn btn-ghost btn-xl" id="deshacerStart">Me he equivocado: aún no había empezado</button>`:""}
     <h3 style="margin-top:18px">Fotos y PDF</h3>
     <div class="photos">${fotos.filter(f=>!esPdf(f)).map((f,i)=>`<img src="${f.url}" alt="" data-foto="${i}">`).join("")||""}</div>
@@ -473,6 +486,9 @@ function openJob(id){
   const gc=$("#guardarCita"); if(gc) gc.onclick=()=>patch(t.id,{concertar_cita:true,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
   const em=$("#empezar"); if(em) em.onclick=()=>patch(t.id,{estado:"en_curso"});
   const fin=$("#fin"); if(fin) fin.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email del cliente"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
+  const fac=$("#facturar"); if(fac) fac.onclick=()=>patch(t.id,{estado:"facturado"});
+  const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>patch(t.id,{estado:"finalizada"});
   const ai=$("#abrirInc"); if(ai) ai.onclick=()=>patch(t.id,{estado:"incidencia"});
   const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>patch(t.id,{estado:"finalizada"});
   const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>patch(t.id,{estado:"finalizada"});
