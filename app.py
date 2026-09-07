@@ -27,7 +27,7 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf"}
-MAX_BYTES = 20 * 1024 * 1024
+MAX_BYTES = 60 * 1024 * 1024
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "cortinas-agenda-cambia-esta-clave")
@@ -41,7 +41,7 @@ SEED_USERS = [
     {"usuario": "juan", "password": "juan123", "nombre": "Juan", "rol": "instalador"},
 ]
 
-STATUSES = ["nueva", "asignada", "cita", "en_curso", "incidencia", "finalizada"]
+STATUSES = ["nueva", "asignada", "cita", "en_curso", "incidencia", "finalizada", "facturado"]
 FASES = ["medidas", "instalacion"]
 FOTO_MOMENTOS = ["general", "medidas", "inicio", "fin", "incidencia"]
 
@@ -124,6 +124,36 @@ def load_db() -> dict:
     return data
 
 
+def aligerar_pdf(path: Path) -> None:
+    try:
+        from pypdf import PdfReader, PdfWriter
+    except ImportError:
+        return
+    try:
+        original = path.stat().st_size
+        if original < 2 * 1024 * 1024:
+            return
+        reader = PdfReader(str(path))
+        writer = PdfWriter()
+        for page in reader.pages:
+            try:
+                page.compress_content_streams()
+            except Exception:
+                pass
+            writer.add_page(page)
+        if reader.metadata:
+            writer.add_metadata(reader.metadata)
+        tmp = path.with_suffix(".min.pdf")
+        with tmp.open("wb") as f:
+            writer.write(f)
+        if tmp.stat().st_size and tmp.stat().st_size < original:
+            tmp.replace(path)
+        elif tmp.exists():
+            tmp.unlink()
+    except Exception:
+        pass
+
+
 def guardar_adjunto(file, trabajo: dict, user: dict, momento: str = "general") -> dict:
     if not file or not file.filename:
         raise ValueError("Archivo vacío")
@@ -133,6 +163,8 @@ def guardar_adjunto(file, trabajo: dict, user: dict, momento: str = "general") -
     name = f"{trabajo['id']}_{secrets.token_hex(6)}{ext}"
     dest = UPLOAD_DIR / secure_filename(name)
     file.save(dest)
+    if ext == ".pdf":
+        aligerar_pdf(dest)
     item = {
         "id": secrets.token_hex(6),
         "archivo": dest.name,
@@ -651,8 +683,8 @@ def api_listar():
 @login_required
 def api_crear():
     user = current_user()
-    if user["rol"] != "dueno":
-        return jsonify({"error": "Solo el dueño puede crear trabajos"}), 403
+    if user["rol"] not in ("dueno", "instalador"):
+        return jsonify({"error": "No puedes crear trabajos"}), 403
     if request.files or request.form:
         body = request.form.to_dict()
         files = request.files.getlist("archivos") or request.files.getlist("archivo")
@@ -662,10 +694,15 @@ def api_crear():
     if not (body.get("cliente") or "").strip():
         return jsonify({"error": "El nombre del cliente es obligatorio"}), 400
     db = load_db()
-    inst = find_user(db, body.get("asignado_a") or "")
-    if inst and inst["rol"] == "instalador":
-        body["asignado_a"] = inst["usuario"]
-        body["asignado_nombre"] = inst["nombre"]
+    if user["rol"] == "instalador":
+        body["asignado_a"] = user["usuario"]
+        body["asignado_nombre"] = user["nombre"]
+        inst = find_user(db, user["usuario"])
+    else:
+        inst = find_user(db, body.get("asignado_a") or "")
+        if inst and inst["rol"] == "instalador":
+            body["asignado_a"] = inst["usuario"]
+            body["asignado_nombre"] = inst["nombre"]
     trabajo = nuevo_trabajo(user, body, fase=body.get("fase") or "medidas")
     if trabajo["notas_iniciales"]:
         add_msg(trabajo, user, trabajo["notas_iniciales"])
@@ -708,6 +745,8 @@ def api_actualizar(trabajo_id: str):
         nuevo = body["estado"]
         if nuevo not in STATUSES:
             return jsonify({"error": "Estado no válido"}), 400
+        if nuevo == "facturado" and user["rol"] != "dueno":
+            return jsonify({"error": "Solo el dueño puede marcar facturado"}), 403
         anterior = trabajo["estado"]
         trabajo["estado"] = nuevo
         if nuevo == "en_curso" and anterior != "en_curso":
@@ -757,8 +796,7 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=trabajo["id"],
                     tipo="finalizada",
                 )
-                aviso = enviar_correo_cliente(trabajo, fase_txt)
-                add_msg(trabajo, user, "Correo al cliente: " + aviso)
+                add_msg(trabajo, user, "Terminada. El dueño enviará el correo al cliente.")
             if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
                 inst_job = crear_instalacion_desde(trabajo, user)
                 trabajo["relacionado_id"] = inst_job["id"]
@@ -773,6 +811,20 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=inst_job["id"],
                     tipo="instalacion_lista",
                 )
+
+    if body.get("enviar_correo"):
+        if user["rol"] != "dueno":
+            return jsonify({"error": "Solo el dueño puede enviar el correo"}), 403
+        fase_mail = "toma de medidas" if trabajo.get("fase") == "medidas" else "instalación"
+        aviso = enviar_correo_cliente(trabajo, fase_mail)
+        add_msg(trabajo, user, "Correo al cliente: " + aviso)
+        add_alerta(
+            db,
+            para="dueno",
+            texto=f"Correo de {fase_mail} terminada: {aviso}",
+            trabajo_id=trabajo["id"],
+            tipo="correo",
+        )
 
     if "incidencia_nota" in body:
         trabajo["incidencia_nota"] = (body.get("incidencia_nota") or "").strip()
