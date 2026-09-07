@@ -459,7 +459,7 @@ function openJob(id){
       <button class="btn btn-ghost btn-xl" id="cancelarInc">No era incidencia: está terminada</button>`:""}
     ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
     ${!simple && (t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo al cliente</button>`:""}
-    ${!simple && t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-sage btn-xl" id="facturar">Marcar FACTURADA</button>`:""}
+    ${!simple && t.estado==="finalizada"?`<button class="btn btn-sage btn-xl" id="facturar">Marcar FACTURADA</button>`:""}
     ${!simple && t.estado==="facturado"?`<button class="btn btn-ghost btn-xl" id="deshacerFac">Quitar facturada</button>`:""}
     ${t.estado==="en_curso"?`<button class="btn btn-ghost btn-xl" id="deshacerStart">Me he equivocado: aún no había empezado</button>`:""}
     <h3 style="margin-top:18px">Fotos y PDF</h3>
