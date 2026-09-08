@@ -458,7 +458,7 @@ function openJob(id){
       <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>
       <button class="btn btn-ghost btn-xl" id="cancelarInc">No era incidencia: está terminada</button>`:""}
     ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
-    ${!simple && (t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo al cliente</button>`:""}
+    ${(t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo al cliente</button>`:""}
     ${!simple && t.estado==="finalizada"?`<button class="btn btn-sage btn-xl" id="facturar">Marcar FACTURADA</button>`:""}
     ${!simple && t.estado==="facturado"?`<button class="btn btn-ghost btn-xl" id="deshacerFac">Quitar facturada</button>`:""}
     ${t.estado==="en_curso"?`<button class="btn btn-ghost btn-xl" id="deshacerStart">Me he equivocado: aún no había empezado</button>`:""}
@@ -483,9 +483,14 @@ function openJob(id){
   $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
   const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
-  const gc=$("#guardarCita"); if(gc) gc.onclick=()=>patch(t.id,{concertar_cita:true,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
+  const gc=$("#guardarCita"); if(gc) gc.onclick=()=>{
+    const mail=t.email||"";
+    const ok=confirm(mail?"¿Guardar la cita y enviar correo a "+mail+"?":"¿Guardar la cita? No hay email del cliente.");
+    if(!ok) return;
+    patch(t.id,{concertar_cita:true,enviar_correo_cita:!!mail,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
+  };
   const em=$("#empezar"); if(em) em.onclick=()=>{if(!confirm("¿Marcar este trabajo como EMPEZADO?")) return; patch(t.id,{estado:"en_curso"});};
-  const fin=$("#fin"); if(fin) fin.onclick=()=>{if(!confirm("¿Está terminado este trabajo?")) return; patch(t.id,{estado:"finalizada"});};
+  const fin=$("#fin"); if(fin) fin.onclick=()=>{if(!confirm(t.email?"¿Está terminado? Se enviará un correo a "+t.email:"¿Está terminado este trabajo? No hay email del cliente.")) return; patch(t.id,{estado:"finalizada"});};
   const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email del cliente"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
   const fac=$("#facturar"); if(fac) fac.onclick=()=>{if(!confirm("¿Marcar este trabajo como FACTURADO?")) return; patch(t.id,{estado:"facturado"});};
   const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>{if(!confirm("¿Quitar el estado de facturado?")) return; patch(t.id,{estado:"finalizada"});};
