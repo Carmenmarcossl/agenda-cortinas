@@ -3,18 +3,21 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
 import secrets
+import shutil
 import smtplib
 import socket
+import zipfile
 from email.message import EmailMessage
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
+from flask import Flask, jsonify, redirect, render_template, request, send_file, send_from_directory, session
 from werkzeug.utils import secure_filename
 
 APP_DIR = Path(__file__).resolve().parent
@@ -25,6 +28,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DATA_FILE = DATA_DIR / "data.json"
 UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+BACKUP_DIR = DATA_DIR / "backups"
+BACKUP_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf"}
 MAX_BYTES = 60 * 1024 * 1024
@@ -121,6 +126,7 @@ def load_db() -> dict:
         t.setdefault("incidencia_nota", "")
         t.setdefault("email", "")
         t.setdefault("email_final", "")
+    copia_automatica()
     return data
 
 
@@ -182,11 +188,31 @@ def guardar_adjunto(file, trabajo: dict, user: dict, momento: str = "general") -
     return item
 
 
+def copia_automatica() -> None:
+    if not DATA_FILE.exists():
+        return
+    semana = datetime.now().strftime("%Y-W%W")
+    dest = BACKUP_DIR / f"data-{semana}.json"
+    if dest.exists():
+        return
+    try:
+        shutil.copy2(DATA_FILE, dest)
+        viejas = sorted(BACKUP_DIR.glob("data-*.json"))
+        for antigua in viejas[:-8]:
+            try:
+                antigua.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def save_db(db: dict) -> None:
     tmp = DATA_FILE.with_suffix(".json.tmp")
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, indent=2)
     tmp.replace(DATA_FILE)
+    copia_automatica()
 
 
 def find_trabajo(db: dict, trabajo_id: str):
@@ -547,6 +573,28 @@ def api_me():
         return jsonify({"user": None})
     db = load_db()
     return jsonify({"user": current_user(), "instaladores": [public_user(u) for u in instaladores(db)], "clientes": db.get("clientes") or []})
+
+
+@app.get("/api/copia")
+@login_required
+def api_copia():
+    if current_user()["rol"] != "dueno":
+        return jsonify({"error": "Solo el dueño puede bajar la copia"}), 403
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        if DATA_FILE.exists():
+            zf.write(DATA_FILE, arcname="data.json")
+        if UPLOAD_DIR.exists():
+            for f in UPLOAD_DIR.iterdir():
+                if f.is_file():
+                    zf.write(f, arcname="uploads/" + f.name)
+        if BACKUP_DIR.exists():
+            for f in BACKUP_DIR.iterdir():
+                if f.is_file():
+                    zf.write(f, arcname="backups/" + f.name)
+    buf.seek(0)
+    nombre = "agenda-copia-" + datetime.now().strftime("%Y%m%d-%H%M") + ".zip"
+    return send_file(buf, as_attachment=True, download_name=nombre, mimetype="application/zip")
 
 
 @app.get("/api/clientes")
