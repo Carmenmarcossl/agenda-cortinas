@@ -69,7 +69,10 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
     sitio = ", ".join(x for x in [trabajo.get("direccion"), trabajo.get("localidad")] if x)
     msg = EmailMessage()
     if motivo == "cita":
-        cuando = f"{trabajo.get('cita_fecha') or ''} {trabajo.get('cita_hora') or ''}".strip()
+        cf = trabajo.get("cita_fecha") or ""
+        if len(cf) >= 10 and cf[4] == "-":
+            cf = cf[8:10] + "/" + cf[5:7] + "/" + cf[0:4]
+        cuando = f"{cf} {trabajo.get('cita_hora') or ''}".strip()
         msg["Subject"] = f"Cita {que} — {trabajo.get('cliente') or 'Agenda Cortinas'}"
         cuerpo = (
             f"Hola,\n\n"
