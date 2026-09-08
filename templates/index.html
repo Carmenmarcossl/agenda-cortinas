@@ -349,10 +349,12 @@ function openClientes(){
       <button class="btn btn-primary btn-xl" type="submit">Guardar tienda</button>
       <div class="error" id="errCli"></div>
     </form>
-    <div style="margin-top:14px">${list.length?list.map(c=>`<div class="alert-item" style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-      <div><b>${escapeHtml(c.nombre)}</b><div class="meta">${escapeHtml(c.email||"Sin correo")}</div></div>
-      <button class="btn btn-ghost" data-del="${c.id}" type="button">Quitar</button>
-    </div>`).join(""):`<p class="meta">Aún no hay fichas.</p>`}</div>
+    <div style="margin-top:14px">${list.length?list.map(c=>`<form class="bloque" data-edit="${c.id}">
+      <label>Nombre</label><input name="nombre" value="${escapeHtml(c.nombre)}" required>
+      <label>Email</label><input name="email" type="email" value="${escapeHtml(c.email||"")}">
+      <div class="actions"><button class="btn btn-primary" type="submit">Guardar cambios</button>
+      <button class="btn btn-ghost" data-del="${c.id}" type="button">Quitar</button></div>
+    </form>`).join(""):`<p class="meta">Aún no hay fichas.</p>`}</div>
     <button class="btn btn-ghost btn-xl" id="cerrarCli">Cerrar</button></div>`;
   dlg.showModal();
   $("#cerrarCli").onclick=()=>dlg.close();
@@ -363,6 +365,12 @@ function openClientes(){
       state.clientes=data.clientes||[]; openClientes();
     }catch(err){$("#errCli").textContent=err.message;}
   };
+  dlg.querySelectorAll("[data-edit]").forEach(f=>f.onsubmit=async e=>{
+    e.preventDefault();
+    const body=Object.fromEntries(new FormData(f));
+    const data=await api("/api/clientes/"+f.dataset.edit,{method:"PATCH",body});
+    state.clientes=data.clientes||[]; openClientes();
+  });
   dlg.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
     if(!confirm("¿Quitar esta tienda de la lista?")) return;
     const data=await api("/api/clientes/"+b.dataset.del,{method:"DELETE"});
