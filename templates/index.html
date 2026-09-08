@@ -74,6 +74,9 @@
     dialog::backdrop{background:rgba(42,29,20,.45)}
     .sheet{background:var(--card);border-radius:20px;padding:20px;max-height:92vh;overflow:auto}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .bloque{border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin:14px 0;background:#fff}
+    .bloque h3{font-size:16px;margin:0 0 4px}
+    .bloque .meta{margin:0 0 8px}
     .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
     .msgs{margin-top:10px;display:flex;flex-direction:column;gap:8px}
     .msg{background:#f3ebe1;border-radius:14px;padding:10px 12px}
@@ -217,7 +220,7 @@ function renderInstalador(){
 function renderDueno(){
   const c={pend:0,cita:0,curso:0,fin:0};
   state.trabajos.forEach(t=>{ if(t.estado==="finalizada")c.fin++; else if(t.estado==="en_curso")c.curso++; else if(t.estado==="cita")c.cita++; else c.pend++; });
-  $("#app").innerHTML=`${header(`<a class="btn btn-ghost" id="btnCopia" href="/api/copia">Copia</a><button class="btn btn-ghost" id="btnCli">Clientes</button><button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
+  $("#app").innerHTML=`${header(`<a class="btn btn-ghost" id="btnCopia" href="/api/copia">Copia</a><button class="btn btn-ghost" id="btnCli">Tiendas</button><button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
     ${state.enlaces && state.enlaces.length ? `<div class="card" style="padding:12px 14px;margin-bottom:12px"><b>En el iPhone:</b> misma Wi‑Fi que el Mac y abre Safari en<br>${state.enlaces.map(e=>`<code style="font-size:16px">${e}</code>`).join("<br>")}<br><span class="meta">Luego: Compartir → Añadir a pantalla de inicio.</span></div>` : ""}
     <div class="stats">
       <div class="card stat"><b>${c.pend}</b><span>Por enviar / citar</span></div>
@@ -239,7 +242,7 @@ function renderDueno(){
   const incs=state.trabajos.filter(t=>t.estado==="incidencia");
   main.innerHTML=`
     ${chipsFiltro()}
-    ${incs.length?`<div class="card" style="padding:14px;margin-bottom:12px"><b>${incs.length} incidencia${incs.length>1?"s":""} abierta${incs.length>1?"s":""}</b><div class="meta">Sigue siendo la misma instalación (cliente, dirección, fotos). No está cerrada del todo.</div></div>`:""}
+    ${incs.length?`<div class="card" style="padding:14px;margin-bottom:12px"><b>${incs.length} incidencia${incs.length>1?"s":""} abierta${incs.length>1?"s":""}</b><div class="meta">Sigue siendo la misma instalación (tienda, dirección, fotos). No está cerrada del todo.</div></div>`:""}
     ${filtered().map(t=>jobCard(t,false)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Pulsa + para crear una toma de medidas.</p></div>`}`;
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
   document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
@@ -286,13 +289,24 @@ function openNuevo(){
   const dlg=$("#dlg");
   dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
     <label>Qué hay que hacer</label><select name="fase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option></select>
-    <label>Cliente</label>
-    <select id="selCliente"><option value="">Nuevo cliente…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}${c.email?" — "+escapeHtml(c.email):""}</option>`).join("")}</select>
-    <input name="cliente" id="inCliente" required placeholder="Quién te encarga el trabajo">
-    <label>Email del cliente</label><input name="email" id="inEmail" type="email" placeholder="correo@cliente.com">
-    <label>Cliente final</label><input name="cliente_final" placeholder="Quién vive en la casa / destinatario">
-    <label>Email del cliente final</label><input name="email_final" type="email" placeholder="correo@casa.com">
-    <div class="row"><div><label>Teléfono</label><input name="telefono" type="tel"></div><div><label>Tipo</label><input name="tipo"></div></div>
+    <div class="bloque">
+      <h3>Tienda (quien encarga)</h3>
+      <p class="meta">A este se le envían los correos de cita y de terminada.</p>
+      <label>Lista</label>
+      <select id="selCliente"><option value="">Nueva tienda…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}${c.email?" — "+escapeHtml(c.email):""}</option>`).join("")}</select>
+      <label>Nombre</label>
+      <input name="cliente" id="inCliente" required placeholder="El Corte Inglés, tienda…">
+      <label>Email</label><input name="email" id="inEmail" type="email" placeholder="correo@tienda.com">
+      <label>Teléfono</label><input name="telefono" type="tel">
+    </div>
+    <div class="bloque">
+      <h3>Cliente final (casa / tienda)</h3>
+      <p class="meta">No recibe el correo automático. Solo para llamar o anotar.</p>
+      <label>Nombre</label><input name="cliente_final" placeholder="Quién vive o atiende">
+      <label>Email 1</label><input name="email_final" type="email" placeholder="correo@casa.com">
+      <label>Email 2</label><input name="email_final2" type="email" placeholder="otro correo (opcional)">
+      <div class="row"><div><label>Teléfono 1</label><input name="telefono_final" type="tel"></div><div><label>Teléfono 2</label><input name="telefono_final2" type="tel"></div></div>
+    </div>
     <label>Dirección</label><input name="direccion" placeholder="Calle y número">
     <label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad">
     <label>Medidas</label><textarea name="medidas"></textarea>
@@ -312,7 +326,7 @@ function openNuevo(){
     e.preventDefault();
     const nombre=(inC && inC.value || "").trim();
     if(!nombre){
-      $("#errN").textContent="Falta el nombre del Cliente (arriba del formulario). El cliente final no sirve.";
+      $("#errN").textContent="Falta el nombre de la tienda (arriba). El cliente final no sirve.";
       if(inC){ inC.focus(); inC.scrollIntoView({block:"center"}); }
       return;
     }
@@ -327,12 +341,12 @@ function openNuevo(){
 function openClientes(){
   const dlg=$("#dlg");
   const list=state.clientes||[];
-  dlg.innerHTML=`<div class="sheet"><h2>Clientes</h2>
+  dlg.innerHTML=`<div class="sheet"><h2>Tiendas</h2>
     <p class="meta">Solo nombre y correo. Luego salen en el desplegable al crear un trabajo.</p>
     <form id="formCli">
       <label>Nombre</label><input name="nombre" required placeholder="Pepito Pérez">
-      <label>Email</label><input name="email" type="email" placeholder="correo@cliente.com">
-      <button class="btn btn-primary btn-xl" type="submit">Guardar cliente</button>
+      <label>Email</label><input name="email" type="email" placeholder="correo@tienda.com">
+      <button class="btn btn-primary btn-xl" type="submit">Guardar tienda</button>
       <div class="error" id="errCli"></div>
     </form>
     <div style="margin-top:14px">${list.length?list.map(c=>`<div class="alert-item" style="display:flex;justify-content:space-between;gap:8px;align-items:center">
@@ -350,7 +364,7 @@ function openClientes(){
     }catch(err){$("#errCli").textContent=err.message;}
   };
   dlg.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
-    if(!confirm("¿Quitar este cliente de la lista?")) return;
+    if(!confirm("¿Quitar esta tienda de la lista?")) return;
     const data=await api("/api/clientes/"+b.dataset.del,{method:"DELETE"});
     state.clientes=data.clientes||[]; openClientes();
   });
@@ -427,15 +441,26 @@ function openJob(id){
   dlg.innerHTML=`<div class="sheet">
     <span class="fase">${FASES[t.fase]}</span>
     <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
-    ${t.cliente_final?`<p class="meta">Cliente final: <b>${escapeHtml(t.cliente_final)}</b></p>`:""}
-    ${t.email?`<p class="meta">Email cliente: <a href="mailto:${escapeHtml(t.email)}">${escapeHtml(t.email)}</a></p>`:""}
-    ${t.email_final?`<p class="meta">Email cliente final: <a href="mailto:${escapeHtml(t.email_final)}">${escapeHtml(t.email_final)}</a></p>`:""}
+    <div class="bloque">
+      <h3>Tienda</h3>
+      ${t.email?`<p class="meta">Email: <a href="mailto:${escapeHtml(t.email)}">${escapeHtml(t.email)}</a></p>`:""}
+      ${t.telefono?`<p class="meta">Tel: <a href="tel:${escapeHtml(t.telefono)}">${escapeHtml(t.telefono)}</a></p>`:""}
+    </div>
+    ${(t.cliente_final||t.email_final||t.email_final2||t.telefono_final||t.telefono_final2)?`<div class="bloque">
+      <h3>Cliente final</h3>
+      ${t.cliente_final?`<p class="meta"><b>${escapeHtml(t.cliente_final)}</b></p>`:""}
+      ${t.email_final?`<p class="meta">Email 1: <a href="mailto:${escapeHtml(t.email_final)}">${escapeHtml(t.email_final)}</a></p>`:""}
+      ${t.email_final2?`<p class="meta">Email 2: <a href="mailto:${escapeHtml(t.email_final2)}">${escapeHtml(t.email_final2)}</a></p>`:""}
+      ${t.telefono_final?`<p class="meta">Tel. 1: <a href="tel:${escapeHtml(t.telefono_final)}">${escapeHtml(t.telefono_final)}</a></p>`:""}
+      ${t.telefono_final2?`<p class="meta">Tel. 2: <a href="tel:${escapeHtml(t.telefono_final2)}">${escapeHtml(t.telefono_final2)}</a></p>`:""}
+    </div>`:""}
     <p class="meta">${escapeHtml(sitio||"")}</p>
     <p class="meta">Día: <b>${fmtCita(t)}</b>${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</p>
-    ${t.tipo?`<p class="detalle"><b>Tipo:</b> ${escapeHtml(t.tipo)}</p>`:""}
     ${t.medidas?`<p class="detalle"><b>Medidas:</b> ${escapeHtml(t.medidas)}</p>`:""}
     <div class="stack">
-      ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar al cliente</a>`:""}
+      ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar a la tienda</a>`:""}
+      ${t.telefono_final?`<a class="btn btn-ghost btn-xl" href="tel:${escapeHtml(t.telefono_final)}">Llamar cliente final</a>`:""}
+      ${t.telefono_final2?`<a class="btn btn-ghost btn-xl" href="tel:${escapeHtml(t.telefono_final2)}">Llamar final 2</a>`:""}
       ${maps?`<a class="btn btn-ghost btn-xl" href="${maps}" target="_blank" rel="noopener">Ver en el mapa</a>`:""}
     </div>
     ${!simple && t.estado!=="finalizada"?`<label>Mandar a</label><select id="selInst">${instOptions(t.asignado_a||"")}</select>
@@ -458,7 +483,7 @@ function openJob(id){
       <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>
       <button class="btn btn-ghost btn-xl" id="cancelarInc">No era incidencia: está terminada</button>`:""}
     ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
-    ${(t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo al cliente</button>`:""}
+    ${(t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo a la tienda</button>`:""}
     ${!simple && t.estado==="finalizada"?`<button class="btn btn-sage btn-xl" id="facturar">Marcar FACTURADA</button>`:""}
     ${!simple && t.estado==="facturado"?`<button class="btn btn-ghost btn-xl" id="deshacerFac">Quitar facturada</button>`:""}
     ${t.estado==="en_curso"?`<button class="btn btn-ghost btn-xl" id="deshacerStart">Me he equivocado: aún no había empezado</button>`:""}
@@ -485,13 +510,13 @@ function openJob(id){
   const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
   const gc=$("#guardarCita"); if(gc) gc.onclick=()=>{
     const mail=t.email||"";
-    const ok=confirm(mail?"¿Guardar la cita y enviar correo a "+mail+"?":"¿Guardar la cita? No hay email del cliente.");
+    const ok=confirm(mail?"¿Guardar la cita y enviar correo a "+mail+"?":"¿Guardar la cita? No hay email de la tienda.");
     if(!ok) return;
     patch(t.id,{concertar_cita:true,enviar_correo_cita:!!mail,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
   };
   const em=$("#empezar"); if(em) em.onclick=()=>{if(!confirm("¿Marcar este trabajo como EMPEZADO?")) return; patch(t.id,{estado:"en_curso"});};
-  const fin=$("#fin"); if(fin) fin.onclick=()=>{if(!confirm(t.email?"¿Está terminado? Se enviará un correo a "+t.email:"¿Está terminado este trabajo? No hay email del cliente.")) return; patch(t.id,{estado:"finalizada"});};
-  const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email del cliente"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
+  const fin=$("#fin"); if(fin) fin.onclick=()=>{if(!confirm(t.email?"¿Está terminado? Se enviará un correo a "+t.email:"¿Está terminado este trabajo? No hay email de la tienda.")) return; patch(t.id,{estado:"finalizada"});};
+  const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email de la tienda"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
   const fac=$("#facturar"); if(fac) fac.onclick=()=>{if(!confirm("¿Marcar este trabajo como FACTURADO?")) return; patch(t.id,{estado:"facturado"});};
   const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>{if(!confirm("¿Quitar el estado de facturado?")) return; patch(t.id,{estado:"finalizada"});};
   const ai=$("#abrirInc"); if(ai) ai.onclick=()=>{if(!confirm("¿Abrir una incidencia en este trabajo?")) return; patch(t.id,{estado:"incidencia"});};
