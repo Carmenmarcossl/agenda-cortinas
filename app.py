@@ -56,9 +56,14 @@ def now_iso() -> str:
 
 
 def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") -> str:
-    destino = (trabajo.get("email") or "").strip()
-    if not destino or "@" not in destino:
+    destinos_cli = []
+    for k in ("email", "email2"):
+        e = (trabajo.get(k) or "").strip()
+        if e and "@" in e and e.lower() not in [x.lower() for x in destinos_cli]:
+            destinos_cli.append(e)
+    if not destinos_cli:
         return "sin correo de cliente"
+    destino = destinos_cli[0]
     user = (os.environ.get("SMTP_USER") or "").strip()
     password = (os.environ.get("SMTP_PASS") or "").strip()
     host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -94,17 +99,21 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
     msg["From"] = origen
     msg["To"] = destino
     copia = (os.environ.get("MAIL_COPY") or "victor@carmenmarcossl.es").strip()
-    destinos = [destino]
-    if copia and copia.lower() != destino.lower():
-        msg["Cc"] = copia
+    destinos = list(destinos_cli)
+    ccs = []
+    if copia and copia.lower() not in [x.lower() for x in destinos]:
+        ccs.append(copia)
         destinos.append(copia)
+    if ccs:
+        msg["Cc"] = ", ".join(ccs)
     msg.set_content(cuerpo)
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
             smtp.starttls()
             smtp.login(user, password)
             smtp.send_message(msg, to_addrs=destinos)
-        return "enviado a " + destino + ((" y copia a " + copia) if copia and copia.lower() != destino.lower() else "")
+        extra = (" y copia a " + copia) if copia and copia.lower() not in [x.lower() for x in destinos_cli] else ""
+        return "enviado a " + " y ".join(destinos_cli) + extra
     except Exception as err:
         return "no se pudo enviar: " + str(err)[:160]
 
@@ -147,6 +156,11 @@ def load_db() -> dict:
         t.setdefault("incidencia_nota", "")
         t.setdefault("email", "")
         t.setdefault("email_final", "")
+        t.setdefault("email2", "")
+        t.setdefault("email_final2", "")
+        t.setdefault("telefono2", "")
+        t.setdefault("telefono_final", "")
+        t.setdefault("telefono_final2", "")
     copia_automatica()
     return data
 
@@ -348,8 +362,13 @@ def nuevo_trabajo(user: dict, body: dict, fase: str = "medidas") -> dict:
         "cliente": (body.get("cliente") or "").strip(),
         "cliente_final": (body.get("cliente_final") or "").strip(),
         "email": (body.get("email") or "").strip(),
+        "email2": (body.get("email2") or "").strip(),
         "email_final": (body.get("email_final") or "").strip(),
+        "email_final2": (body.get("email_final2") or "").strip(),
         "telefono": (body.get("telefono") or "").strip(),
+        "telefono2": (body.get("telefono2") or "").strip(),
+        "telefono_final": (body.get("telefono_final") or "").strip(),
+        "telefono_final2": (body.get("telefono_final2") or "").strip(),
         "direccion": (body.get("direccion") or "").strip(),
         "localidad": (body.get("localidad") or "").strip(),
         "tipo": (body.get("tipo") or "").strip(),
@@ -379,8 +398,13 @@ def crear_instalacion_desde(medidas: dict, user: dict) -> dict:
             "cliente": medidas.get("cliente"),
             "cliente_final": medidas.get("cliente_final"),
             "email": medidas.get("email"),
+            "email2": medidas.get("email2"),
             "email_final": medidas.get("email_final"),
+            "email_final2": medidas.get("email_final2"),
             "telefono": medidas.get("telefono"),
+            "telefono2": medidas.get("telefono2"),
+            "telefono_final": medidas.get("telefono_final"),
+            "telefono_final2": medidas.get("telefono_final2"),
             "direccion": medidas.get("direccion"),
             "localidad": medidas.get("localidad"),
             "tipo": medidas.get("tipo"),
@@ -637,6 +661,28 @@ def api_crear_cliente():
         return jsonify({"error": "Pon el nombre del cliente"}), 400
     db = load_db()
     c = guardar_cliente(db, nombre, email)
+    save_db(db)
+    return jsonify({"cliente": c, "clientes": db.get("clientes") or []})
+
+
+@app.patch("/api/clientes/<cid>")
+@login_required
+def api_editar_cliente(cid: str):
+    if current_user()["rol"] != "dueno":
+        return jsonify({"error": "Solo el dueño"}), 403
+    body = request.get_json(silent=True) or {}
+    db = load_db()
+    c = next((x for x in db.get("clientes") or [] if x.get("id") == cid), None)
+    if not c:
+        return jsonify({"error": "Tienda no encontrada"}), 404
+    if "nombre" in body:
+        nombre = (body.get("nombre") or "").strip()
+        if not nombre:
+            return jsonify({"error": "El nombre no puede estar vacío"}), 400
+        c["nombre"] = nombre
+    if "email" in body:
+        c["email"] = (body.get("email") or "").strip()
+    db["clientes"].sort(key=lambda x: (x.get("nombre") or "").lower())
     save_db(db)
     return jsonify({"cliente": c, "clientes": db.get("clientes") or []})
 
@@ -900,7 +946,7 @@ def api_actualizar(trabajo_id: str):
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email_final", "telefono", "direccion", "localidad", "tipo", "medidas"):
+    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "tipo", "medidas"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
         elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota"):
