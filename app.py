@@ -71,6 +71,11 @@ def enviar_correo_cliente(trabajo: dict, que: str) -> str:
     msg["Subject"] = f"{que.capitalize()} terminada — {trabajo.get('cliente') or 'Agenda Cortinas'}"
     msg["From"] = origen
     msg["To"] = destino
+    copia = (os.environ.get("MAIL_COPY") or "victor@carmenmarcossl.es").strip()
+    destinos = [destino]
+    if copia and copia.lower() != destino.lower():
+        msg["Cc"] = copia
+        destinos.append(copia)
     msg.set_content(
         f"Hola,\n\n"
         f"La {que} de {trabajo.get('cliente') or 'su trabajo'} ya está terminada.\n"
@@ -82,8 +87,8 @@ def enviar_correo_cliente(trabajo: dict, que: str) -> str:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
             smtp.starttls()
             smtp.login(user, password)
-            smtp.send_message(msg)
-        return "enviado a " + destino
+            smtp.send_message(msg, to_addrs=destinos)
+        return "enviado a " + destino + ((" y copia a " + copia) if copia and copia.lower() != destino.lower() else "")
     except Exception as err:
         return "no se pudo enviar: " + str(err)[:160]
 
@@ -844,7 +849,9 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=trabajo["id"],
                     tipo="finalizada",
                 )
-                add_msg(trabajo, user, "Terminada. El dueño enviará el correo al cliente.")
+            if trabajo.get("email"):
+                aviso = enviar_correo_cliente(trabajo, fase_txt)
+                add_msg(trabajo, user, "Correo al cliente: " + aviso)
             if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
                 inst_job = crear_instalacion_desde(trabajo, user)
                 trabajo["relacionado_id"] = inst_job["id"]
@@ -861,8 +868,6 @@ def api_actualizar(trabajo_id: str):
                 )
 
     if body.get("enviar_correo"):
-        if user["rol"] != "dueno":
-            return jsonify({"error": "Solo el dueño puede enviar el correo"}), 403
         fase_mail = "toma de medidas" if trabajo.get("fase") == "medidas" else "instalación"
         aviso = enviar_correo_cliente(trabajo, fase_mail)
         add_msg(trabajo, user, "Correo al cliente: " + aviso)
