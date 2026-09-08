@@ -217,7 +217,7 @@ function renderInstalador(){
 function renderDueno(){
   const c={pend:0,cita:0,curso:0,fin:0};
   state.trabajos.forEach(t=>{ if(t.estado==="finalizada")c.fin++; else if(t.estado==="en_curso")c.curso++; else if(t.estado==="cita")c.cita++; else c.pend++; });
-  $("#app").innerHTML=`${header(`<button class="btn btn-ghost" id="btnCli">Clientes</button><button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
+  $("#app").innerHTML=`${header(`<a class="btn btn-ghost" id="btnCopia" href="/api/copia">Copia</a><button class="btn btn-ghost" id="btnCli">Clientes</button><button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
     ${state.enlaces && state.enlaces.length ? `<div class="card" style="padding:12px 14px;margin-bottom:12px"><b>En el iPhone:</b> misma Wi‑Fi que el Mac y abre Safari en<br>${state.enlaces.map(e=>`<code style="font-size:16px">${e}</code>`).join("<br>")}<br><span class="meta">Luego: Compartir → Añadir a pantalla de inicio.</span></div>` : ""}
     <div class="stats">
       <div class="card stat"><b>${c.pend}</b><span>Por enviar / citar</span></div>
@@ -484,18 +484,18 @@ function openJob(id){
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
   const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
   const gc=$("#guardarCita"); if(gc) gc.onclick=()=>patch(t.id,{concertar_cita:true,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
-  const em=$("#empezar"); if(em) em.onclick=()=>patch(t.id,{estado:"en_curso"});
-  const fin=$("#fin"); if(fin) fin.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const em=$("#empezar"); if(em) em.onclick=()=>{if(!confirm("¿Marcar este trabajo como EMPEZADO?")) return; patch(t.id,{estado:"en_curso"});};
+  const fin=$("#fin"); if(fin) fin.onclick=()=>{if(!confirm("¿Está terminado este trabajo?")) return; patch(t.id,{estado:"finalizada"});};
   const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email del cliente"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
-  const fac=$("#facturar"); if(fac) fac.onclick=()=>patch(t.id,{estado:"facturado"});
-  const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>patch(t.id,{estado:"finalizada"});
-  const ai=$("#abrirInc"); if(ai) ai.onclick=()=>patch(t.id,{estado:"incidencia"});
-  const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>patch(t.id,{estado:"finalizada"});
-  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>patch(t.id,{estado:"finalizada"});
+  const fac=$("#facturar"); if(fac) fac.onclick=()=>{if(!confirm("¿Marcar este trabajo como FACTURADO?")) return; patch(t.id,{estado:"facturado"});};
+  const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>{if(!confirm("¿Quitar el estado de facturado?")) return; patch(t.id,{estado:"finalizada"});};
+  const ai=$("#abrirInc"); if(ai) ai.onclick=()=>{if(!confirm("¿Abrir una incidencia en este trabajo?")) return; patch(t.id,{estado:"incidencia"});};
+  const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>{if(!confirm("¿La incidencia está acabada y el trabajo terminado?")) return; patch(t.id,{estado:"finalizada"});};
+  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia y el trabajo está terminado?")) return; patch(t.id,{estado:"finalizada"});};
   const gn=$("#guardarNotaInc"); if(gn) gn.onclick=()=>patch(t.id,{incidencia_nota:$("#notaInc").value});
-  const df=$("#deshacerFin"); if(df) df.onclick=()=>patch(t.id,{estado:"en_curso"});
-  const ds=$("#deshacerStart"); if(ds) ds.onclick=()=>patch(t.id,{estado:t.cita_fecha?"cita":"asignada"});
-  const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar?"))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
+  const df=$("#deshacerFin"); if(df) df.onclick=()=>{if(!confirm("¿Este trabajo no estaba terminado?")) return; patch(t.id,{estado:"en_curso"});};
+  const ds=$("#deshacerStart"); if(ds) ds.onclick=()=>{if(!confirm("¿Este trabajo aún no había empezado?")) return; patch(t.id,{estado:t.cita_fecha?"cita":"asignada"});};
+  const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar este trabajo? No se puede deshacer."))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
   const fm=$("#formMsg"); if(fm) fm.onsubmit=async e=>{e.preventDefault(); await api(`/api/trabajos/${t.id}/mensajes`,{method:"POST",body:{texto:e.target.texto.value}}); await load(); openJob(t.id);};
   $("#formFoto").onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target);
