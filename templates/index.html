@@ -462,6 +462,27 @@ function openJob(id){
       ${t.telefono_final?`<p class="meta">Tel. 1: <a href="tel:${escapeHtml(t.telefono_final)}">${escapeHtml(t.telefono_final)}</a></p>`:""}
       ${t.telefono_final2?`<p class="meta">Tel. 2: <a href="tel:${escapeHtml(t.telefono_final2)}">${escapeHtml(t.telefono_final2)}</a></p>`:""}
     </div>`:""}
+    ${!simple?`<button class="btn btn-ghost btn-xl" id="editarDatos">Cambiar datos de esta ficha</button>
+    <form id="formDatos" hidden>
+      <div class="bloque">
+        <h3>Tienda</h3>
+        <label>Nombre</label><input name="cliente" value="${escapeHtml(t.cliente||"")}" required>
+        <label>Email</label><input name="email" type="email" value="${escapeHtml(t.email||"")}">
+        <label>Teléfono</label><input name="telefono" value="${escapeHtml(t.telefono||"")}">
+      </div>
+      <div class="bloque">
+        <h3>Cliente final</h3>
+        <label>Nombre</label><input name="cliente_final" value="${escapeHtml(t.cliente_final||"")}">
+        <label>Email 1</label><input name="email_final" type="email" value="${escapeHtml(t.email_final||"")}">
+        <label>Email 2</label><input name="email_final2" type="email" value="${escapeHtml(t.email_final2||"")}">
+        <div class="row"><div><label>Tel. 1</label><input name="telefono_final" value="${escapeHtml(t.telefono_final||"")}"></div>
+        <div><label>Tel. 2</label><input name="telefono_final2" value="${escapeHtml(t.telefono_final2||"")}"></div></div>
+      </div>
+      <label>Dirección</label><input name="direccion" value="${escapeHtml(t.direccion||"")}">
+      <label>Localidad</label><input name="localidad" value="${escapeHtml(t.localidad||"")}">
+      <label>Medidas</label><textarea name="medidas">${escapeHtml(t.medidas||"")}</textarea>
+      <button class="btn btn-primary btn-xl" type="submit">Guardar datos</button>
+    </form>`:""}
     <p class="meta">${escapeHtml(sitio||"")}</p>
     <p class="meta">Día: <b>${fmtCita(t)}</b>${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</p>
     ${t.medidas?`<p class="detalle"><b>Medidas:</b> ${escapeHtml(t.medidas)}</p>`:""}
@@ -514,6 +535,8 @@ function openJob(id){
   </div>`;
   dlg.showModal();
   $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+  const ed=$("#editarDatos"); if(ed) ed.onclick=()=>{$("#formDatos").hidden=false; ed.hidden=true;};
+  const fd=$("#formDatos"); if(fd) fd.onsubmit=e=>{e.preventDefault(); patch(t.id,Object.fromEntries(new FormData(fd)));};
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
   const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
   const gc=$("#guardarCita"); if(gc) gc.onclick=()=>{
