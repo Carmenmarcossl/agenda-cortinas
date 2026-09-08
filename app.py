@@ -951,6 +951,8 @@ def api_actualizar(trabajo_id: str):
             trabajo[field] = (body.get(field) or "").strip()
         elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota"):
             trabajo[field] = (body.get(field) or "").strip()
+    if user["rol"] == "dueno" and ("cliente" in body or "email" in body):
+        guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
 
     if body.get("concertar_cita"):
         if not (body.get("cita_fecha") or trabajo.get("cita_fecha")):
