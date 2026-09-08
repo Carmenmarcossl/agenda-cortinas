@@ -55,7 +55,7 @@ def now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def enviar_correo_cliente(trabajo: dict, que: str) -> str:
+def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") -> str:
     destino = (trabajo.get("email") or "").strip()
     if not destino or "@" not in destino:
         return "sin correo de cliente"
@@ -68,7 +68,26 @@ def enviar_correo_cliente(trabajo: dict, que: str) -> str:
         return "falta configurar SMTP_USER y SMTP_PASS en Render"
     sitio = ", ".join(x for x in [trabajo.get("direccion"), trabajo.get("localidad")] if x)
     msg = EmailMessage()
-    msg["Subject"] = f"{que.capitalize()} terminada — {trabajo.get('cliente') or 'Agenda Cortinas'}"
+    if motivo == "cita":
+        cuando = f"{trabajo.get('cita_fecha') or ''} {trabajo.get('cita_hora') or ''}".strip()
+        msg["Subject"] = f"Cita {que} — {trabajo.get('cliente') or 'Agenda Cortinas'}"
+        cuerpo = (
+            f"Hola,\n\n"
+            f"Hemos quedado para la {que} de {trabajo.get('cliente') or 'su trabajo'}"
+            f"{(' el ' + cuando) if cuando else ''}.\n"
+            f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+            f"{('Nota: ' + (trabajo.get('cita_nota') or '') + chr(10)) if trabajo.get('cita_nota') else ''}"
+            f"\nUn saludo.\nAgenda Cortinas\n"
+        )
+    else:
+        msg["Subject"] = f"{que.capitalize()} terminada — {trabajo.get('cliente') or 'Agenda Cortinas'}"
+        cuerpo = (
+            f"Hola,\n\n"
+            f"La {que} de {trabajo.get('cliente') or 'su trabajo'} ya está terminada.\n"
+            f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+            f"{('Cliente final: ' + (trabajo.get('cliente_final') or '') + chr(10)) if trabajo.get('cliente_final') else ''}"
+            f"\nUn saludo.\nAgenda Cortinas\n"
+        )
     msg["From"] = origen
     msg["To"] = destino
     copia = (os.environ.get("MAIL_COPY") or "victor@carmenmarcossl.es").strip()
@@ -76,13 +95,7 @@ def enviar_correo_cliente(trabajo: dict, que: str) -> str:
     if copia and copia.lower() != destino.lower():
         msg["Cc"] = copia
         destinos.append(copia)
-    msg.set_content(
-        f"Hola,\n\n"
-        f"La {que} de {trabajo.get('cliente') or 'su trabajo'} ya está terminada.\n"
-        f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
-        f"{('Cliente final: ' + (trabajo.get('cliente_final') or '') + chr(10)) if trabajo.get('cliente_final') else ''}"
-        f"\nUn saludo.\nAgenda Cortinas\n"
-    )
+    msg.set_content(cuerpo)
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
             smtp.starttls()
@@ -901,6 +914,9 @@ def api_actualizar(trabajo_id: str):
         cuando = f"{trabajo['cita_fecha']} {trabajo['cita_hora']}".strip()
         extra = f" — {trabajo['cita_nota']}" if trabajo["cita_nota"] else ""
         add_msg(trabajo, user, f"Cita: {cuando}{extra}")
+        if body.get("enviar_correo_cita") and trabajo.get("email"):
+            aviso = enviar_correo_cliente(trabajo, fase_txt, motivo="cita")
+            add_msg(trabajo, user, "Correo de cita: " + aviso)
         add_alerta(
             db,
             para="dueno",
