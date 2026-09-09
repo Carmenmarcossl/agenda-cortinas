@@ -250,6 +250,7 @@ def load_db() -> dict:
         t.setdefault("telefono_final2", "")
         t.setdefault("asignado_el", "")
         t.setdefault("ultimo_recordatorio", "")
+        t.setdefault("rieles", "")
     for u in data["usuarios"]:
         u.setdefault("email", "")
         clave = (u.get("usuario") or "").lower()
@@ -971,6 +972,9 @@ def api_actualizar(trabajo_id: str):
             return jsonify({"error": "Estado no válido"}), 400
         if nuevo == "facturado" and user["rol"] != "dueno":
             return jsonify({"error": "Solo el dueño puede marcar facturado"}), 403
+        if nuevo == "finalizada" and trabajo.get("fase") == "instalacion":
+            if not str(trabajo.get("rieles") or body.get("rieles") or "").strip():
+                return jsonify({"error": "Pon cuántos rieles se han instalado antes de terminar"}), 400
         anterior = trabajo["estado"]
         trabajo["estado"] = nuevo
         if nuevo == "en_curso" and anterior != "en_curso":
@@ -1055,10 +1059,10 @@ def api_actualizar(trabajo_id: str):
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "tipo", "medidas"):
+    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "tipo", "medidas", "rieles"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
-        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota"):
+        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles"):
             trabajo[field] = (body.get(field) or "").strip()
     if user["rol"] == "dueno" and ("cliente" in body or "email" in body):
         guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
