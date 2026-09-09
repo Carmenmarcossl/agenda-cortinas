@@ -53,7 +53,9 @@
     .tabs{display:flex;gap:8px;margin:0 0 14px}
     .tabs button{flex:1}
     .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
-    .chips{display:flex;gap:6px;overflow:auto;padding-bottom:10px}
+    .chips{display:flex;gap:6px;overflow:auto;padding-bottom:2px}
+    .caja-filtros{border:1px solid var(--line);border-radius:16px;padding:10px 12px 8px;margin:0 0 10px;background:#fff}
+    .caja-filtros .tag{font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
     .chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 12px;font-size:14px;cursor:pointer;white-space:nowrap}
     .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
     .job{padding:16px;margin-bottom:12px;cursor:pointer}
@@ -187,8 +189,8 @@ function bindCommon(){
 }
 
 function chipsFiltro(){
-  return `<div class="chips">${[["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"],["todos","Todo"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div>
-    <div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div>`;
+  return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
+    <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>`;
 }
 function bindFiltros(){
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
