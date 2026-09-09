@@ -509,6 +509,12 @@ function openJob(id){
       <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>
       ${t.fase==="instalacion"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}`:""}
     ${t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}
+    ${t.fase==="instalacion"?`<div class="bloque"><h3>Instalaciones realizadas</h3>
+      <p class="meta">Cantidad de rieles (u otras unidades) para poder facturar. Obligatorio para terminar.</p>
+      <input id="datoRieles" value="${escapeHtml(t.rieles||"")}" placeholder="Ej. 3 rieles">
+      <button class="btn btn-ghost btn-xl" type="button" id="guardarRieles">Guardar cantidad</button>
+      <div class="error" id="errRieles"></div>
+    </div>`:""}
     ${t.estado==="incidencia"?`<p class="detalle"><b>Incidencia abierta.</b> Escribe qué pasa y sube fotos. Si pulaste por error, corrígela.</p>
       <label>Notas de la incidencia</label>
       <textarea id="notaInc" placeholder="Qué ha pasado, qué falta...">${escapeHtml(t.incidencia_nota||"")}</textarea>
@@ -576,7 +582,13 @@ function openJob(id){
     patch(t.id,{concertar_cita:true,enviar_correo_cita:!!mail,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
   };
   const em=$("#empezar"); if(em) em.onclick=()=>{if(!confirm("¿Marcar este trabajo como EMPEZADO?")) return; patch(t.id,{estado:"en_curso"});};
-  const fin=$("#fin"); if(fin) fin.onclick=()=>{if(!confirm(t.email?"¿Está terminado? Se enviará un correo a "+t.email:"¿Está terminado este trabajo? No hay email de la tienda.")) return; patch(t.id,{estado:"finalizada"});};
+  const gr=$("#guardarRieles"); if(gr) gr.onclick=()=>{const v=($("#datoRieles")&&$("#datoRieles").value||"").trim(); if(!v){$("#errRieles").textContent="Pon una cantidad"; return;} patch(t.id,{rieles:v});};
+  const fin=$("#fin"); if(fin) fin.onclick=()=>{
+    const rieles=t.fase==="instalacion"?(($("#datoRieles")&&$("#datoRieles").value)||t.rieles||"").trim():"ok";
+    if(t.fase==="instalacion" && !rieles){alert("Antes de terminar pon cuántos rieles se han instalado."); $("#datoRieles")&&$("#datoRieles").focus(); return;}
+    if(!confirm(t.email?"¿Está terminado? Se enviará un correo a "+t.email:"¿Está terminado este trabajo? No hay email de la tienda.")) return;
+    patch(t.id,{estado:"finalizada",rieles:t.fase==="instalacion"?rieles:undefined});
+  };
   const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email de la tienda"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
   const fac=$("#facturar"); if(fac) fac.onclick=()=>{if(!confirm("¿Marcar este trabajo como FACTURADO?")) return; patch(t.id,{estado:"facturado"});};
   const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>{if(!confirm("¿Quitar el estado de facturado?")) return; patch(t.id,{estado:"finalizada"});};
