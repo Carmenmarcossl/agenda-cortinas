@@ -55,6 +55,29 @@ def now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
+MAIL_INSTALADORES = {
+    "juan": "graujuan12@hotmail.es",
+    "jose": "jose@carmenmarcossl.es",
+}
+
+
+def correo_instalador(inst: dict | None) -> str:
+    if not inst:
+        return ""
+    propio = (inst.get("email") or "").strip()
+    if propio and "@" in propio:
+        return propio
+    clave = (inst.get("usuario") or "").strip().lower()
+    if clave in MAIL_INSTALADORES:
+        return MAIL_INSTALADORES[clave]
+    nombre = (inst.get("nombre") or "").strip().lower()
+    if "juan" in nombre:
+        return MAIL_INSTALADORES["juan"]
+    if "jose" in nombre or "josé" in nombre:
+        return MAIL_INSTALADORES["jose"]
+    return ""
+
+
 def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") -> str:
     destinos_cli = []
     for k in ("email", "email2"):
@@ -118,6 +141,70 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
         return "no se pudo enviar: " + str(err)[:160]
 
 
+def enviar_correo_recordatorio(trabajo: dict, inst: dict, destino: str) -> str:
+    user = (os.environ.get("SMTP_USER") or "").strip()
+    password = (os.environ.get("SMTP_PASS") or "").strip()
+    host = os.environ.get("SMTP_HOST", "smtp.ionos.es")
+    port = int(os.environ.get("SMTP_PORT") or "587")
+    origen = (os.environ.get("MAIL_FROM") or user).strip()
+    if not user or not password or not origen:
+        return "falta SMTP"
+    if not destino or "@" not in destino:
+        return "sin correo de instalador"
+    fase = "toma de medidas" if trabajo.get("fase") == "medidas" else "instalación"
+    sitio = ", ".join(x for x in [trabajo.get("direccion"), trabajo.get("localidad")] if x)
+    msg = EmailMessage()
+    msg["Subject"] = f"Pendiente de citar — {trabajo.get('cliente') or 'trabajo'} ({fase})"
+    msg["From"] = origen
+    msg["To"] = destino
+    msg.set_content(
+        f"Hola {inst.get('nombre') or ''},\n\n"
+        f"Tienes una {fase} SIN CITAR:\n"
+        f"Tienda: {trabajo.get('cliente') or ''}\n"
+        f"{('Cliente final: ' + (trabajo.get('cliente_final') or '') + chr(10)) if trabajo.get('cliente_final') else ''}"
+        f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+        f"Teléfono: {trabajo.get('telefono') or '—'}\n\n"
+        f"Llama y pon la cita en la agenda. Este aviso se repetirá cada día hasta que esté citada.\n\n"
+        f"Agenda Cortinas\nhttps://agenda-cortinas.onrender.com\n"
+    )
+    try:
+        with smtplib.SMTP(host, port, timeout=20) as smtp:
+            smtp.starttls()
+            smtp.login(user, password)
+            smtp.send_message(msg)
+        return "ok"
+    except Exception as err:
+        return str(err)[:160]
+
+
+def procesar_recordatorios(db: dict) -> int:
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    enviados = 0
+    usuarios = {u["usuario"]: u for u in db.get("usuarios") or []}
+    for t in db.get("trabajos") or []:
+        if t.get("estado") != "asignada":
+            continue
+        if not t.get("asignado_a"):
+            continue
+        inst = usuarios.get(t.get("asignado_a") or "")
+        destino = correo_instalador(inst)
+        if not destino:
+            continue
+        asignado_el = (t.get("asignado_el") or t.get("actualizado") or t.get("creado") or "")[:10]
+        if asignado_el >= hoy:
+            continue
+        if (t.get("ultimo_recordatorio") or "")[:10] == hoy:
+            continue
+        aviso = enviar_correo_recordatorio(t, inst or {}, destino)
+        t["ultimo_recordatorio"] = now_iso()
+        if aviso == "ok":
+            enviados += 1
+            add_msg(t, inst or {"nombre": "Agenda", "rol": "dueno"}, f"Recordatorio de cita enviado a {destino}.")
+    if enviados:
+        save_db(db)
+    return enviados
+
+
 def empty_db() -> dict:
     return {"usuarios": [dict(u) for u in SEED_USERS], "trabajos": [], "alertas": [], "push": [], "clientes": []}
 
@@ -161,6 +248,19 @@ def load_db() -> dict:
         t.setdefault("telefono2", "")
         t.setdefault("telefono_final", "")
         t.setdefault("telefono_final2", "")
+        t.setdefault("asignado_el", "")
+        t.setdefault("ultimo_recordatorio", "")
+    for u in data["usuarios"]:
+        u.setdefault("email", "")
+        clave = (u.get("usuario") or "").lower()
+        if not u["email"] and clave in MAIL_INSTALADORES:
+            u["email"] = MAIL_INSTALADORES[clave]
+        nom = (u.get("nombre") or "").lower()
+        if not u["email"]:
+            if "juan" in nom:
+                u["email"] = MAIL_INSTALADORES["juan"]
+            elif "jose" in nom or "josé" in nom:
+                u["email"] = MAIL_INSTALADORES["jose"]
     copia_automatica()
     return data
 
@@ -264,7 +364,7 @@ def instaladores(db: dict) -> list:
 
 
 def public_user(u: dict) -> dict:
-    return {"usuario": u["usuario"], "nombre": u["nombre"], "rol": u["rol"]}
+    return {"usuario": u["usuario"], "nombre": u["nombre"], "rol": u["rol"], "email": u.get("email") or ""}
 
 
 def add_alerta(db: dict, *, para: str, texto: str, trabajo_id: str, tipo: str) -> None:
@@ -425,6 +525,8 @@ def crear_instalacion_desde(medidas: dict, user: dict) -> dict:
 def asignar(trabajo: dict, inst: dict, user: dict, db: dict, fase_txt: str) -> None:
     trabajo["asignado_a"] = inst["usuario"]
     trabajo["asignado_nombre"] = inst["nombre"]
+    trabajo["asignado_el"] = now_iso()
+    trabajo["ultimo_recordatorio"] = ""
     if trabajo["estado"] == "nueva":
         trabajo["estado"] = "asignada"
     add_msg(trabajo, user, f"{fase_txt.capitalize()} enviada a {inst['nombre']}.")
@@ -726,7 +828,8 @@ def api_crear_usuario():
     while find_user(db, usuario):
         usuario = f"{base}{n}"
         n += 1
-    nuevo = {"usuario": usuario, "password": password, "nombre": nombre, "rol": "instalador"}
+    email = (body.get("email") or "").strip()
+    nuevo = {"usuario": usuario, "password": password, "nombre": nombre, "rol": "instalador", "email": email}
     db["usuarios"].append(nuevo)
     save_db(db)
     return jsonify({"usuario": {**public_user(nuevo), "password": password}})
@@ -754,6 +857,8 @@ def api_editar_usuario(usuario: str):
         if len(password) < 4:
             return jsonify({"error": "La contraseña debe tener al menos 4 caracteres"}), 400
         u["password"] = password
+    if "email" in body:
+        u["email"] = (body.get("email") or "").strip()
     save_db(db)
     return jsonify({"usuario": public_user(u)})
 
@@ -778,6 +883,10 @@ def api_borrar_usuario(usuario: str):
 @login_required
 def api_listar():
     db = load_db()
+    try:
+        procesar_recordatorios(db)
+    except Exception:
+        pass
     user = current_user()
     trabajos = db["trabajos"]
     if user["rol"] == "instalador":
