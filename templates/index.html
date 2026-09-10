@@ -292,21 +292,19 @@ function openNuevo(){
   dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
     <label>Qué hay que hacer</label><select name="fase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option></select>
     <div class="bloque">
-      <h3>Tienda (quien encarga)</h3>
-      <p class="meta">A este se le envían los correos de cita y de terminada.</p>
+      <h3>Tienda</h3>
       <label>Lista</label>
       <select id="selCliente"><option value="">Nueva tienda…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}${c.email?" — "+escapeHtml(c.email):""}</option>`).join("")}</select>
-      <label>Nombre</label>
-      <input name="cliente" id="inCliente" required placeholder="El Corte Inglés, tienda…">
-      <label>Email</label><input name="email" id="inEmail" type="email" placeholder="correo@tienda.com">
-      <label>Teléfono</label><input name="telefono" type="tel">
+      <div id="cajaNuevaTienda">
+        <label>Nombre</label>
+        <input name="cliente" id="inCliente" required placeholder="Nombre de la tienda">
+        <label>Correo</label><input name="email" id="inEmail" type="email" placeholder="correo@tienda.com">
+      </div>
     </div>
     <div class="bloque">
-      <h3>Cliente final (casa / tienda)</h3>
-      <p class="meta">No recibe el correo automático. Solo para llamar o anotar.</p>
+      <h3>Cliente final</h3>
       <label>Nombre</label><input name="cliente_final" placeholder="Quién vive o atiende">
-      <label>Email 1</label><input name="email_final" type="email" placeholder="correo@casa.com">
-      <label>Email 2</label><input name="email_final2" type="email" placeholder="otro correo (opcional)">
+      <label>Email</label><input name="email_final" type="email" placeholder="correo@casa.com">
       <label>Teléfono</label><input name="telefono_final" type="tel">
         <label>Dirección</label><input name="direccion" placeholder="Calle y número">
         <div class="row"><div><label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad"></div>
@@ -319,10 +317,15 @@ function openNuevo(){
     <div class="error" id="errN"></div></form>`;
   dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
   const sel=$("#selCliente"); const inC=$("#inCliente"); const inE=$("#inEmail");
+  const cajaN=$("#cajaNuevaTienda");
   if(sel) sel.onchange=()=>{
     const o=sel.selectedOptions[0];
-    if(!o || !o.value){ inC.value=""; inE.value=""; inC.readOnly=false; return; }
+    if(!o || !o.value){
+      if(cajaN) cajaN.hidden=false;
+      inC.value=""; inE.value=""; inC.readOnly=false; return;
+    }
     inC.value=o.dataset.nombre||""; inE.value=o.dataset.email||""; inC.readOnly=true;
+    if(cajaN) cajaN.hidden=true;
   };
   $("#formNuevo").onsubmit=async e=>{
     e.preventDefault();
@@ -451,7 +454,19 @@ function openJob(id){
   dlg.innerHTML=`<div class="sheet">
     <span class="fase">${FASES[t.fase]}</span>
     <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
-    <p class="meta">${t.cliente_final?escapeHtml(t.cliente_final):""}${sitio?(t.cliente_final?" · ":"")+escapeHtml(sitio):""}</p>
+    <div class="bloque">
+      <h3>Tienda</h3>
+      <p><b>${escapeHtml(t.cliente||"—")}</b></p>
+      ${t.email?`<p class="meta">${escapeHtml(t.email)}</p>`:""}
+      ${t.telefono?`<p class="meta">${escapeHtml(t.telefono)}</p>`:""}
+    </div>
+    <div class="bloque">
+      <h3>Cliente final</h3>
+      <p><b>${escapeHtml(t.cliente_final||"—")}</b></p>
+      ${t.email_final?`<p class="meta">${escapeHtml(t.email_final)}</p>`:""}
+      ${t.telefono_final?`<p class="meta">${escapeHtml(t.telefono_final)}</p>`:""}
+      ${sitio?`<p class="meta">${escapeHtml(sitio)}</p>`:""}
+    </div>
     ${simple?"":`<button class="btn btn-ghost btn-xl" type="button" id="editarDatos">Editar datos</button>
     <div id="formDatos" hidden>
       <div class="bloque">
