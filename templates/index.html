@@ -256,7 +256,7 @@ function jobCard(t,big){
     <div style="display:flex;justify-content:space-between;gap:8px"><div>
       <span class="fase">${FASES[t.fase]}</span>${t.estado==="incidencia"?`<span class="badge s-incidencia">Incidencia</span>`:""}<h3>${escapeHtml(t.cliente)}</h3>
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
-      <div class="meta">${escapeHtml([t.direccion,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
+      <div class="meta">${escapeHtml([t.direccion,t.cp,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
       <div class="meta">${fmtCita(t)}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</div>
     </div><span class="badge s-${t.estado}">${ESTADOS[t.estado]}</span></div></article>`;
 }
@@ -307,11 +307,11 @@ function openNuevo(){
       <label>Nombre</label><input name="cliente_final" placeholder="Quién vive o atiende">
       <label>Email 1</label><input name="email_final" type="email" placeholder="correo@casa.com">
       <label>Email 2</label><input name="email_final2" type="email" placeholder="otro correo (opcional)">
-      <div class="row"><div><label>Teléfono 1</label><input name="telefono_final" type="tel"></div><div><label>Teléfono 2</label><input name="telefono_final2" type="tel"></div></div>
+      <label>Teléfono</label><input name="telefono_final" type="tel">
+        <label>Dirección</label><input name="direccion" placeholder="Calle y número">
+        <div class="row"><div><label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad"></div>
+        <div><label>Código postal</label><input name="cp" placeholder="46000"></div></div>
     </div>
-    <label>Dirección</label><input name="direccion" placeholder="Calle y número">
-    <label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad">
-    <label>Medidas</label><textarea name="medidas"></textarea>
     <label>Foto o PDF</label>
     <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
     ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>`}
@@ -446,7 +446,7 @@ function openAlertas(){
 
 function openJob(id){
   const t=state.trabajos.find(x=>x.id===id); if(!t) return; state.sel=id;
-  const dlg=$("#dlg"); const sitio=[t.direccion,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
+  const dlg=$("#dlg"); const sitio=[t.direccion,t.cp,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
   const simple=esInst(); const fotos=t.fotos||[];
   dlg.innerHTML=`<div class="sheet">
     <span class="fase">${FASES[t.fase]}</span>
@@ -468,10 +468,10 @@ function openJob(id){
         <label>Nombre</label><input id="datoFinal" value="${escapeHtml(t.cliente_final||"")}">
         <div class="row"><div><label>Email</label><input id="datoEmailF" value="${escapeHtml(t.email_final||"")}"></div>
         <div><label>Teléfono</label><input id="datoTelF" value="${escapeHtml(t.telefono_final||"")}"></div></div>
+        <label>Dirección</label><input id="datoDir" value="${escapeHtml(t.direccion||"")}">
+        <div class="row"><div><label>Localidad</label><input id="datoLoc" value="${escapeHtml(t.localidad||"")}"></div>
+        <div><label>Código postal</label><input id="datoCp" value="${escapeHtml(t.cp||"")}"></div></div>
       </div>
-      <div class="row"><div><label>Dirección</label><input id="datoDir" value="${escapeHtml(t.direccion||"")}"></div>
-      <div><label>Localidad</label><input id="datoLoc" value="${escapeHtml(t.localidad||"")}"></div></div>
-      <label>Medidas</label><textarea id="datoMedidas">${escapeHtml(t.medidas||"")}</textarea>
       <button class="btn btn-primary btn-xl" type="button" id="guardarDatos">Guardar datos</button>
       <div class="error" id="errDatos"></div>
     </div>`}
@@ -552,7 +552,7 @@ function openJob(id){
         telefono_final:($("#datoTelF").value||"").trim(),
         direccion:($("#datoDir").value||"").trim(),
         localidad:($("#datoLoc").value||"").trim(),
-        medidas:($("#datoMedidas").value||"").trim()
+        cp:($("#datoCp")&&$("#datoCp").value||"").trim()
       });
     }catch(err){ $("#errDatos").textContent=err.message; }
   };
