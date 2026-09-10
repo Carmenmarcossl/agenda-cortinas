@@ -240,6 +240,7 @@ def load_db() -> dict:
         t.setdefault("cliente_final", "")
         t.setdefault("archivos", [])
         t.setdefault("localidad", "")
+        t.setdefault("cp", "")
         t.setdefault("incidencia_nota", "")
         t.setdefault("email", "")
         t.setdefault("email_final", "")
@@ -472,6 +473,7 @@ def nuevo_trabajo(user: dict, body: dict, fase: str = "medidas") -> dict:
         "telefono_final2": (body.get("telefono_final2") or "").strip(),
         "direccion": (body.get("direccion") or "").strip(),
         "localidad": (body.get("localidad") or "").strip(),
+        "cp": (body.get("cp") or "").strip(),
         "tipo": (body.get("tipo") or "").strip(),
         "medidas": (body.get("medidas") or "").strip(),
         "notas_iniciales": (body.get("notas_iniciales") or "").strip(),
@@ -508,6 +510,7 @@ def crear_instalacion_desde(medidas: dict, user: dict) -> dict:
             "telefono_final2": medidas.get("telefono_final2"),
             "direccion": medidas.get("direccion"),
             "localidad": medidas.get("localidad"),
+            "cp": medidas.get("cp"),
             "tipo": medidas.get("tipo"),
             "medidas": medidas.get("medidas"),
             "notas_iniciales": "Instalación creada al terminar la toma de medidas.",
@@ -1059,7 +1062,7 @@ def api_actualizar(trabajo_id: str):
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "tipo", "medidas", "rieles"):
+    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "rieles"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
         elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles"):
