@@ -47,7 +47,7 @@ SEED_USERS = [
 ]
 
 STATUSES = ["nueva", "asignada", "cita", "en_curso", "incidencia", "finalizada", "facturado"]
-FASES = ["medidas", "instalacion"]
+FASES = ["medidas", "instalacion", "reparto"]
 FOTO_MOMENTOS = ["general", "medidas", "inicio", "fin", "incidencia"]
 
 
@@ -255,9 +255,12 @@ def load_db() -> dict:
         t.setdefault("telefono2", "")
         t.setdefault("telefono_final", "")
         t.setdefault("telefono_final2", "")
+        t.setdefault("tareas", [])
+        t.setdefault("rieles", "")
         t.setdefault("asignado_el", "")
         t.setdefault("ultimo_recordatorio", "")
         t.setdefault("rieles", "")
+        t.setdefault("tareas", [])
     for u in data["usuarios"]:
         u.setdefault("email", "")
         clave = (u.get("usuario") or "").lower()
@@ -487,6 +490,7 @@ def nuevo_trabajo(user: dict, body: dict, fase: str = "medidas") -> dict:
         "cita_fecha": (body.get("cita_fecha") or "").strip(),
         "cita_hora": (body.get("cita_hora") or "").strip(),
         "cita_nota": "",
+        "tareas": [x.strip() for x in (body.get("tareas") or []) if str(x).strip()],
         "creado": now_iso(),
         "actualizado": now_iso(),
         "creado_por": user["nombre"],
@@ -921,10 +925,13 @@ def api_crear():
         return jsonify({"error": "No puedes crear trabajos"}), 403
     if request.files or request.form:
         body = request.form.to_dict()
+        body["tareas"] = request.form.getlist("tareas")
         files = request.files.getlist("archivos") or request.files.getlist("archivo")
     else:
         body = request.get_json(silent=True) or {}
         files = []
+    if (body.get("fase") or "") == "reparto" and not (body.get("cliente") or "").strip():
+        body["cliente"] = "Reparto"
     if not (body.get("cliente") or "").strip():
         return jsonify({"error": "El nombre del cliente es obligatorio"}), 400
     db = load_db()
@@ -947,8 +954,9 @@ def api_crear():
             except ValueError as err:
                 return jsonify({"error": str(err)}), 400
     if inst and inst["rol"] == "instalador":
-        asignar(trabajo, inst, user, db, "toma de medidas" if trabajo["fase"] == "medidas" else "instalación")
-    guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
+        asignar(trabajo, inst, user, db, "reparto" if trabajo["fase"]=="reparto" else ("toma de medidas" if trabajo["fase"] == "medidas" else "instalación"))
+    if trabajo.get("fase") != "reparto":
+        guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
     db["trabajos"].append(trabajo)
     save_db(db)
     return jsonify({"trabajo": trabajo})
@@ -966,7 +974,7 @@ def api_actualizar(trabajo_id: str):
     if user["rol"] == "instalador" and trabajo.get("asignado_a") != user["usuario"]:
         return jsonify({"error": "Este trabajo no es tuyo"}), 403
 
-    fase_txt = "toma de medidas" if trabajo.get("fase") == "medidas" else "instalación"
+    fase_txt = "reparto" if trabajo.get("fase")=="reparto" else ("toma de medidas" if trabajo.get("fase") == "medidas" else "instalación")
     instalacion_creada = None
 
     if user["rol"] == "dueno" and body.get("asignado_a"):
@@ -1073,6 +1081,8 @@ def api_actualizar(trabajo_id: str):
             trabajo[field] = (body.get(field) or "").strip()
         elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles"):
             trabajo[field] = (body.get(field) or "").strip()
+    if "tareas" in body:
+        trabajo["tareas"] = [str(x).strip() for x in (body.get("tareas") or []) if str(x).strip()]
     if user["rol"] == "dueno" and ("cliente" in body or "email" in body):
         guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
 
