@@ -498,6 +498,19 @@ function openJob(id){
   const t=state.trabajos.find(x=>x.id===id); if(!t) return; state.sel=id;
   const dlg=$("#dlg"); const sitio=[t.direccion,t.cp,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
   const simple=esInst(); const fotos=t.fotos||[];
+  if(simple && t.fase==="reparto"){
+    dlg.innerHTML=`<div class="sheet">
+      <span class="fase">Reparto</span>
+      <h2 style="font-size:26px">${escapeHtml(fmtCita(t))}</h2>
+      <div class="bloque"><h3>Notas</h3>
+        ${(t.tareas||[]).map(x=>`<p style="font-size:18px;margin:8px 0">${escapeHtml(x)}</p>`).join("")||`<p class="meta">Sin notas</p>`}
+      </div>
+      <button class="btn btn-ghost btn-xl" id="cerrar">Cerrar</button>
+    </div>`;
+    dlg.showModal();
+    $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+    return;
+  }
   dlg.innerHTML=`<div class="sheet">
     <span class="fase">${FASES[t.fase]}</span>
     <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
