@@ -274,7 +274,7 @@ function jobCard(t,big){
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
       <div class="meta">${escapeHtml([t.direccion,t.cp,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
       <div class="meta" style="font-size:17px;font-weight:700;color:var(--ink)">${escapeHtml(fmtCita(t))}</div>
-    </div><span class="badge s-${t.estado}">${ESTADOS[t.estado]}</span></div></article>`;
+    </div><span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":ESTADOS[t.estado]}</span></div></article>`;
 }
 function citasSemana(){
   const start=ymd(state.weekStart), end=ymd(addDays(state.weekStart,6));
@@ -498,17 +498,25 @@ function openJob(id){
   const t=state.trabajos.find(x=>x.id===id); if(!t) return; state.sel=id;
   const dlg=$("#dlg"); const sitio=[t.direccion,t.cp,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
   const simple=esInst(); const fotos=t.fotos||[];
-  if(simple && t.fase==="reparto"){
+  if(t.fase==="reparto"){
     dlg.innerHTML=`<div class="sheet">
       <span class="fase">Reparto</span>
       <h2 style="font-size:26px">${escapeHtml(fmtCita(t))}</h2>
-      <div class="bloque"><h3>Notas</h3>
-        ${(t.tareas||[]).map(x=>`<p style="font-size:18px;margin:8px 0">${escapeHtml(x)}</p>`).join("")||`<p class="meta">Sin notas</p>`}
+      ${simple?`<div class="bloque"><h3>Notas</h3>${(t.tareas||[]).map(x=>`<p style="font-size:18px;margin:8px 0">${escapeHtml(x)}</p>`).join("")||`<p class="meta">Sin notas</p>`}</div>`:
+      `<div class="bloque"><h3>Notas del reparto</h3>
+        <div id="listaTareasJob">${(t.tareas&&t.tareas.length?t.tareas:['']).map(x=>`<textarea class="taTarea">${escapeHtml(x)}</textarea>`).join("")}</div>
+        <button class="btn btn-ghost btn-xl" type="button" id="addTareaJob">Añadir recuadro</button>
+        <button class="btn btn-primary btn-xl" type="button" id="guardarTareas">Guardar notas</button>
       </div>
+      ${!t.asignado_a?`<label>Mandar a</label><select id="selInst">${instOptions("")}</select>
+      <button class="btn btn-primary btn-xl" id="enviar">Enviar a este instalador</button>`:""}`}
       <button class="btn btn-ghost btn-xl" id="cerrar">Cerrar</button>
     </div>`;
     dlg.showModal();
     $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+    const atj=$("#addTareaJob"); if(atj) atj.onclick=()=>{const ta=document.createElement("textarea"); ta.className="taTarea"; ta.placeholder="Otra nota…"; $("#listaTareasJob").appendChild(ta);};
+    const gt=$("#guardarTareas"); if(gt) gt.onclick=()=>patch(t.id,{tareas:[...document.querySelectorAll(".taTarea")].map(x=>x.value.trim()).filter(Boolean)});
+    const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
     return;
   }
   dlg.innerHTML=`<div class="sheet">
