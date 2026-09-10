@@ -124,7 +124,23 @@ const $ = (s,el=document)=>el.querySelector(s);
 function monday(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
 function ymd(d){const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");}
 function addDays(d,n){const x=new Date(d); x.setDate(x.getDate()+n); return x;}
-function fmtCita(t){if(!t.cita_fecha) return "Sin día"; const [y,m,d]=t.cita_fecha.split("-"); return d+"/"+m+(t.cita_hora?" · "+t.cita_hora:"");}
+function hora12(h){
+  if(!h) return "";
+  const p=String(h).split(":");
+  let n=parseInt(p[0],10); if(isNaN(n)) return h;
+  if(n===0) n=12; else if(n>12) n-=12;
+  return n+":"+(p[1]||"00");
+}
+function fmtCita(t){
+  if(!t.cita_fecha) return t.asignado_nombre?"Sin citar · "+t.asignado_nombre:"Sin citar";
+  const p=t.cita_fecha.split("-");
+  const d=String(parseInt(p[2]||"0",10));
+  const m=String(parseInt(p[1]||"0",10));
+  let s="Citado el día "+d+" del "+m;
+  if(t.cita_hora) s+=" a las "+hora12(t.cita_hora);
+  if(t.asignado_nombre) s+=" para "+t.asignado_nombre;
+  return s;
+}
 function fmtFecha(iso){if(!iso) return ""; const d=new Date(iso.replace(" ","T")); return Number.isNaN(d.getTime())?iso:d.toLocaleString("es-ES",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
 function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 function unread(){return (state.alertas||[]).filter(a=>!a.leida);}
@@ -257,7 +273,7 @@ function jobCard(t,big){
       <span class="fase">${FASES[t.fase]}</span>${t.estado==="incidencia"?`<span class="badge s-incidencia">Incidencia</span>`:""}<h3>${escapeHtml(t.cliente)}</h3>
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
       <div class="meta">${escapeHtml([t.direccion,t.cp,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
-      <div class="meta">${fmtCita(t)}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</div>
+      <div class="meta" style="font-size:17px;font-weight:700;color:var(--ink)">${escapeHtml(fmtCita(t))}</div>
     </div><span class="badge s-${t.estado}">${ESTADOS[t.estado]}</span></div></article>`;
 }
 function citasSemana(){
@@ -488,13 +504,13 @@ function openJob(id){
       <button class="btn btn-primary btn-xl" type="button" id="guardarDatos">Guardar datos</button>
       <div class="error" id="errDatos"></div>
     </div>`}
-    <p class="meta">Día: <b>${fmtCita(t)}</b>${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</p>
+    <p style="font-size:22px;font-weight:800;margin:10px 0 14px;line-height:1.25">${escapeHtml(fmtCita(t))}</p>
     <div class="stack">
       ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar a la tienda</a>`:""}
       ${t.telefono_final?`<a class="btn btn-ghost btn-xl" href="tel:${escapeHtml(t.telefono_final)}">Llamar cliente final</a>`:""}
       ${maps?`<a class="btn btn-ghost btn-xl" href="${maps}" target="_blank" rel="noopener">Ver en el mapa</a>`:""}
     </div>
-    ${!simple && t.estado!=="finalizada"?`<label>Mandar a</label><select id="selInst">${instOptions(t.asignado_a||"")}</select>
+    ${!simple && t.estado!=="finalizada" && !t.asignado_a?`<label>Mandar a</label><select id="selInst">${instOptions("")}</select>
       <button class="btn btn-primary btn-xl" id="enviar">Enviar a este instalador</button>`:""}
     ${t.estado!=="finalizada" && t.estado!=="incidencia"?`<button class="btn btn-ghost btn-xl" id="cita">Poner día y hora</button>
       <div id="citaBox" hidden>
