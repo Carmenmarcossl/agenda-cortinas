@@ -117,7 +117,7 @@
 <div id="app" class="wrap"></div>
 <script>
 const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",incidencia:"Incidencia",finalizada:"Terminada",facturado:"Facturada"};
-const FASES = {medidas:"Medir",instalacion:"Instalar"};
+const FASES = {medidas:"Medir",instalacion:"Instalar",reparto:"Reparto"};
 const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
 const $ = (s,el=document)=>el.querySelector(s);
@@ -206,7 +206,7 @@ function bindCommon(){
 
 function chipsFiltro(){
   return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
-    <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>`;
+    <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"],["reparto","Reparto"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>`;
 }
 function bindFiltros(){
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
@@ -306,7 +306,14 @@ function instOptions(selected=""){
 function openNuevo(){
   const dlg=$("#dlg");
   dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
-    <label>Qué hay que hacer</label><select name="fase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option></select>
+    <label>Qué hay que hacer</label><select name="fase" id="selFase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option><option value="reparto">Reparto</option></select>
+    <div id="cajaReparto" hidden>
+      <label>Título</label><input name="cliente" id="inRepartoTitulo" placeholder="Ej. Viernes — Adrián">
+      <label>Notas del reparto</label>
+      <div id="listaTareas"><textarea name="tareas" placeholder="Ej. Ir a Navigator"></textarea></div>
+      <button class="btn btn-ghost btn-xl" type="button" id="addTarea">Añadir otro recuadro</button>
+    </div>
+    <div id="cajaNormal">
     <div class="bloque">
       <h3>Tienda</h3>
       <label>Lista</label>
@@ -326,12 +333,29 @@ function openNuevo(){
         <div class="row"><div><label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad"></div>
         <div><label>Código postal</label><input name="cp" placeholder="46000"></div></div>
     </div>
+    </div>
     <label>Foto o PDF</label>
     <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
     ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>`}
     <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
     <div class="error" id="errN"></div></form>`;
   dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
+  const addT=$("#addTarea");
+  if(addT) addT.onclick=()=>{
+    const ta=document.createElement("textarea");
+    ta.name="tareas"; ta.placeholder="Otra nota…";
+    ta.style.marginTop="8px";
+    $("#listaTareas").appendChild(ta);
+  };
+  const sf=$("#selFase");
+  const syncFase=()=>{
+    const r=sf && sf.value==="reparto";
+    const cn=$("#cajaNormal"); const cr=$("#cajaReparto");
+    if(cn) cn.hidden=!!r; if(cr) cr.hidden=!r;
+    const inC=$("#inCliente"); if(inC){ inC.required=!r; inC.disabled=!!r; }
+    const tit=$("#inRepartoTitulo"); if(tit) tit.disabled=!r;
+  };
+  if(sf){ sf.onchange=syncFase; syncFase(); }
   const sel=$("#selCliente"); const inC=$("#inCliente"); const inE=$("#inEmail");
   const cajaN=$("#cajaNuevaTienda");
   if(sel) sel.onchange=()=>{
@@ -345,11 +369,16 @@ function openNuevo(){
   };
   $("#formNuevo").onsubmit=async e=>{
     e.preventDefault();
-    const nombre=(inC && inC.value || "").trim();
-    if(!nombre){
+    const esRep=$("#selFase") && $("#selFase").value==="reparto";
+    const nombre=esRep ? (($("#inRepartoTitulo")&&$("#inRepartoTitulo").value)||"Reparto").trim() : (inC && inC.value || "").trim();
+    if(!esRep && !nombre){
       $("#errN").textContent="Falta el nombre de la tienda (arriba). El cliente final no sirve.";
       if(inC){ inC.focus(); inC.scrollIntoView({block:"center"}); }
       return;
+    }
+    if(esRep){
+      const fd=new FormData(e.target);
+      if(!fd.get("cliente")) fd.set("cliente", nombre);
     }
     try{
       $("#errN").textContent="Guardando…";
@@ -523,6 +552,11 @@ function openJob(id){
       <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>
       ${t.fase==="instalacion"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}`:""}
     ${t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}
+    ${t.fase==="reparto"?`<div class="bloque"><h3>Notas del reparto</h3>
+      <div id="listaTareasJob">${(t.tareas&&t.tareas.length?t.tareas:['']).map(x=>`<textarea class="taTarea">${escapeHtml(x)}</textarea>`).join("")}</div>
+      <button class="btn btn-ghost btn-xl" type="button" id="addTareaJob">Añadir recuadro</button>
+      <button class="btn btn-primary btn-xl" type="button" id="guardarTareas">Guardar notas</button>
+    </div>`:""}
     ${t.fase==="instalacion"?`<div class="bloque"><h3>Instalaciones realizadas</h3>
       <p class="meta">Cantidad de rieles (u otras unidades) para poder facturar. Obligatorio para terminar.</p>
       <input id="datoRieles" value="${escapeHtml(t.rieles||"")}" placeholder="Ej. 3 rieles">
@@ -586,6 +620,8 @@ function openJob(id){
       });
     }catch(err){ $("#errDatos").textContent=err.message; }
   };
+  const atj=$("#addTareaJob"); if(atj) atj.onclick=()=>{const ta=document.createElement("textarea"); ta.className="taTarea"; ta.placeholder="Otra nota…"; $("#listaTareasJob").appendChild(ta);};
+  const gt=$("#guardarTareas"); if(gt) gt.onclick=()=>patch(t.id,{tareas:[...document.querySelectorAll(".taTarea")].map(x=>x.value.trim()).filter(Boolean)});
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
   const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
   const gc=$("#guardarCita"); if(gc) gc.onclick=()=>{
