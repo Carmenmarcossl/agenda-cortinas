@@ -288,7 +288,7 @@ function weekHTML(){
     const d=addDays(start,i); const key=ymd(d);
     const items=state.trabajos.filter(t=>t.cita_fecha===key).sort((a,b)=>(a.cita_hora||"").localeCompare(b.cita_hora||""));
     cols.push(`<div class="day ${key===today?"today":""}"><h4>${DIAS[i]} ${d.getDate()}</h4>
-      ${items.map(t=>`<button class="pill ${t.fase==="instalacion"?"inst":""}" data-id="${t.id}">${t.cita_hora||""} ${escapeHtml(t.cliente)} · ${FASES[t.fase]}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</button>`).join("") || `<span class="meta">Libre</span>`}</div>`);
+      ${items.map(t=>t.fase==="reparto"?`<button class="pill" style="background:#efe3c4" data-id="${t.id}"><b>Reparto${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</b>${(t.tareas||[]).map(n=>`<div>${escapeHtml(n)}</div>`).join("")||"<div class=\"meta\">Sin notas</div>"}</button>`:`<button class="pill ${t.fase==="instalacion"?"inst":""}" data-id="${t.id}">${t.cita_hora||""} ${escapeHtml(t.cliente)} · ${FASES[t.fase]}${t.asignado_nombre?" · "+escapeHtml(t.asignado_nombre):""}</button>`).join("") || `<span class="meta">Libre</span>`}</div>`);
   }
   return `<div class="weekbar"><button class="btn btn-ghost" id="prevS">←</button><strong>${start.getDate()}/${start.getMonth()+1} — ${fin.getDate()}/${fin.getMonth()+1}</strong>
     <button class="btn btn-ghost" id="hoyS">Esta semana</button><button class="btn btn-ghost" id="nextS">→</button></div><div class="week">${cols.join("")}</div>`;
@@ -308,7 +308,7 @@ function openNuevo(){
   dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
     <label>Qué hay que hacer</label><select name="fase" id="selFase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option><option value="reparto">Reparto</option></select>
     <div id="cajaReparto" hidden>
-      <label>Título</label><input name="cliente" id="inRepartoTitulo" placeholder="Ej. Viernes — Adrián">
+      <label>Día del reparto</label><input type="date" name="cita_fecha" id="inRepartoFecha" required>
       <label>Notas del reparto</label>
       <div id="listaTareas"><textarea name="tareas" placeholder="Ej. Ir a Navigator"></textarea></div>
       <button class="btn btn-ghost btn-xl" type="button" id="addTarea">Añadir otro recuadro</button>
@@ -334,8 +334,10 @@ function openNuevo(){
         <div><label>Código postal</label><input name="cp" placeholder="46000"></div></div>
     </div>
     </div>
+    <div id="cajaArchivos">
     <label>Foto o PDF</label>
     <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
+    </div>
     ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>`}
     <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
     <div class="error" id="errN"></div></form>`;
@@ -351,9 +353,9 @@ function openNuevo(){
   const syncFase=()=>{
     const r=sf && sf.value==="reparto";
     const cn=$("#cajaNormal"); const cr=$("#cajaReparto");
-    if(cn) cn.hidden=!!r; if(cr) cr.hidden=!r;
+    if(cn) cn.hidden=!!r; if(cr) cr.hidden=!r; const ca=$("#cajaArchivos"); if(ca) ca.hidden=!!r;
     const inC=$("#inCliente"); if(inC){ inC.required=!r; inC.disabled=!!r; }
-    const tit=$("#inRepartoTitulo"); if(tit) tit.disabled=!r;
+    const tit=$("#inRepartoFecha"); if(tit){ tit.disabled=!r; tit.required=!!r; }
   };
   if(sf){ sf.onchange=syncFase; syncFase(); }
   const sel=$("#selCliente"); const inC=$("#inCliente"); const inE=$("#inEmail");
@@ -370,7 +372,7 @@ function openNuevo(){
   $("#formNuevo").onsubmit=async e=>{
     e.preventDefault();
     const esRep=$("#selFase") && $("#selFase").value==="reparto";
-    const nombre=esRep ? (($("#inRepartoTitulo")&&$("#inRepartoTitulo").value)||"Reparto").trim() : (inC && inC.value || "").trim();
+    const nombre=esRep ? "Reparto" : (inC && inC.value || "").trim();
     if(!esRep && !nombre){
       $("#errN").textContent="Falta el nombre de la tienda (arriba). El cliente final no sirve.";
       if(inC){ inC.focus(); inC.scrollIntoView({block:"center"}); }
