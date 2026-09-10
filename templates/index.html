@@ -451,11 +451,9 @@ function openJob(id){
   dlg.innerHTML=`<div class="sheet">
     <span class="fase">${FASES[t.fase]}</span>
     <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
-    ${simple?`<div class="bloque"><h3>Tienda</h3>
-      ${t.email?`<p class="meta"><a href="mailto:${escapeHtml(t.email)}">${escapeHtml(t.email)}</a></p>`:""}
-      ${t.telefono?`<p class="meta"><a href="tel:${escapeHtml(t.telefono)}">${escapeHtml(t.telefono)}</a></p>`:""}
-      ${t.cliente_final?`<p class="meta">Final: <b>${escapeHtml(t.cliente_final)}</b>${t.telefono_final?" · "+escapeHtml(t.telefono_final):""}</p>`:""}
-    </div>`:`<div id="formDatos">
+    <p class="meta">${t.cliente_final?escapeHtml(t.cliente_final):""}${sitio?(t.cliente_final?" · ":"")+escapeHtml(sitio):""}</p>
+    ${simple?"":`<button class="btn btn-ghost btn-xl" type="button" id="editarDatos">Editar datos</button>
+    <div id="formDatos" hidden>
       <div class="bloque">
         <h3>Tienda</h3>
         <select id="selTiendaJob"><option value="">Elegir tienda…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}</option>`).join("")}</select>
@@ -530,6 +528,7 @@ function openJob(id){
   </div>`;
   dlg.showModal();
   $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+  const ed=$("#editarDatos"); if(ed) ed.onclick=()=>{const box=$("#formDatos"); if(box) box.hidden=false; ed.hidden=true;};
   const stj=$("#selTiendaJob");
   if(stj) stj.onchange=()=>{
     const o=stj.selectedOptions[0];
