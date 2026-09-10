@@ -1159,10 +1159,13 @@ def api_borrar_foto(trabajo_id: str, foto_id: str):
     trabajo = find_trabajo(db, trabajo_id)
     if not trabajo:
         return jsonify({"error": "Trabajo no encontrado"}), 404
-    foto = next((f for f in trabajo["fotos"] if f["id"] == foto_id), None)
+    foto = next((f for f in (trabajo.get("fotos") or []) if f.get("id") == foto_id), None)
     if not foto:
-        return jsonify({"error": "Foto no encontrada"}), 404
-    trabajo["fotos"] = [f for f in trabajo["fotos"] if f["id"] != foto_id]
+        foto = next((f for f in (trabajo.get("archivos") or []) if f.get("id") == foto_id), None)
+    if not foto:
+        return jsonify({"error": "Archivo no encontrado"}), 404
+    trabajo["fotos"] = [f for f in trabajo.get("fotos") or [] if f.get("id") != foto_id]
+    trabajo["archivos"] = [f for f in trabajo.get("archivos") or [] if f.get("id") != foto_id]
     path = UPLOAD_DIR / Path(foto.get("archivo", "")).name
     if path.exists():
         try:
