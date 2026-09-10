@@ -119,7 +119,7 @@
 const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",incidencia:"Incidencia",finalizada:"Terminada",facturado:"Facturada"};
 const FASES = {medidas:"Medir",instalacion:"Instalar",reparto:"Reparto"};
 const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtro:"activos",fase:"todas",weekStart:monday(new Date()),sel:null,error:""};
+const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtros:["activos"],fases:["todas"],quienes:[],weekStart:monday(new Date()),sel:null,error:""};
 const $ = (s,el=document)=>el.querySelector(s);
 function monday(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
 function ymd(d){const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");}
@@ -153,13 +153,29 @@ async function api(path, opts={}) {
   return data;
 }
 
+function toggleFiltro(lista, valor, todos){
+  if(valor===todos) return [todos];
+  let next=(lista||[]).filter(x=>x!==todos);
+  if(next.includes(valor)) next=next.filter(x=>x!==valor);
+  else next=next.concat(valor);
+  return next.length?next:[todos];
+}
+function onFiltro(lista){
+  return (lista||[]).includes("todos") || !(lista||[]).length;
+}
 function filtered(){
   return state.trabajos.filter(t=>{
-    if(state.fase!=="todas" && t.fase!==state.fase) return false;
-    if(state.filtro==="activos") return t.estado!=="finalizada" && t.estado!=="facturado";
-    if(state.filtro==="todos") return true;
-    if(state.filtro==="finalizada") return t.estado==="finalizada" || t.estado==="incidencia";
-    return t.estado===state.filtro;
+    const fs=state.fases||["todas"];
+    if(!fs.includes("todas") && !fs.includes(t.fase)) return false;
+    const qs=state.quienes||[];
+    if(qs.length && !qs.includes(t.asignado_a||"")) return false;
+    const fl=state.filtros||["activos"];
+    if(fl.includes("todos")) return true;
+    return fl.some(f=>{
+      if(f==="activos") return t.estado!=="finalizada" && t.estado!=="facturado";
+      if(f==="finalizada") return t.estado==="finalizada" || t.estado==="incidencia";
+      return t.estado===f;
+    });
   });
 }
 
@@ -205,12 +221,21 @@ function bindCommon(){
 }
 
 function chipsFiltro(){
-  return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${state.filtro===k?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
-    <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"],["reparto","Reparto"]].map(([k,l])=>`<button class="chip ${state.fase===k?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>`;
+  const inst=state.instaladores||[];
+  return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${(state.filtros||[]).includes(k)?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
+    <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"],["reparto","Reparto"]].map(([k,l])=>`<button class="chip ${(state.fases||[]).includes(k)?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>
+    ${esInst()?"":`<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips"><button class="chip ${!(state.quienes||[]).length?"on":""}" data-quien="">Todos</button>${inst.map(u=>`<button class="chip ${(state.quienes||[]).includes(u.usuario)?"on":""}" data-quien="${u.usuario}">${escapeHtml(u.nombre)}</button>`).join("")}</div></div>`}`;
 }
 function bindFiltros(){
-  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
-  document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
+  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtros=toggleFiltro(state.filtros,b.dataset.f,"todos"); render();});
+  document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fases=toggleFiltro(state.fases,b.dataset.fase,"todas"); render();});
+  document.querySelectorAll("[data-quien]").forEach(b=>b.onclick=()=>{
+    const v=b.dataset.quien;
+    if(!v){state.quienes=[]; render(); return;}
+    let q=state.quienes||[];
+    q=q.includes(v)?q.filter(x=>x!==v):q.concat(v);
+    state.quienes=q; render();
+  });
   document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
 }
 function renderInstalador(){
@@ -262,9 +287,7 @@ function renderDueno(){
     ${chipsFiltro()}
     ${incs.length?`<div class="card" style="padding:14px;margin-bottom:12px"><b>${incs.length} incidencia${incs.length>1?"s":""} abierta${incs.length>1?"s":""}</b><div class="meta">Sigue siendo la misma instalación (tienda, dirección, fotos). No está cerrada del todo.</div></div>`:""}
     ${filtered().map(t=>jobCard(t,false)).join("") || `<div class="card empty"><h2>No hay trabajos</h2><p>Pulsa + para crear una toma de medidas.</p></div>`}`;
-  document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtro=b.dataset.f; render();});
-  document.querySelectorAll("[data-fase]").forEach(b=>b.onclick=()=>{state.fase=b.dataset.fase; render();});
-  document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+  bindFiltros();
 }
 
 function jobCard(t,big){
