@@ -94,29 +94,35 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
     origen = (os.environ.get("MAIL_FROM") or user).strip()
     if not user or not password or not origen:
         return "falta configurar SMTP_USER y SMTP_PASS en Render"
-    sitio = ", ".join(x for x in [trabajo.get("direccion"), trabajo.get("localidad")] if x)
+    sitio = ", ".join(x for x in [trabajo.get("direccion"), trabajo.get("cp"), trabajo.get("localidad")] if x)
+    tienda = trabajo.get("cliente") or ""
+    final = trabajo.get("cliente_final") or ""
+    quien = tienda + ((" — " + final) if final else "")
     msg = EmailMessage()
     if motivo == "cita":
         cf = trabajo.get("cita_fecha") or ""
         if len(cf) >= 10 and cf[4] == "-":
             cf = cf[8:10] + "/" + cf[5:7] + "/" + cf[0:4]
         cuando = f"{cf} {trabajo.get('cita_hora') or ''}".strip()
-        msg["Subject"] = f"Cita {que} — {trabajo.get('cliente') or 'Agenda Cortinas'}"
+        msg["Subject"] = f"Cita {que} — {quien or 'Agenda Cortinas'}"
         cuerpo = (
             f"Hola,\n\n"
-            f"Hemos quedado para la {que} de {trabajo.get('cliente') or 'su trabajo'}"
-            f"{(' el ' + cuando) if cuando else ''}.\n"
+            f"Hemos quedado para la {que}.\n"
+            f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
+            f"{('Cliente final: ' + final + chr(10)) if final else ''}"
+            f"{('el ' + cuando + chr(10)) if cuando else ''}"
             f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
             f"{('Nota: ' + (trabajo.get('cita_nota') or '') + chr(10)) if trabajo.get('cita_nota') else ''}"
             f"\nUn saludo.\nAgenda Cortinas\n"
         )
     else:
-        msg["Subject"] = f"{que.capitalize()} terminada — {trabajo.get('cliente') or 'Agenda Cortinas'}"
+        msg["Subject"] = f"{que.capitalize()} terminada — {quien or 'Agenda Cortinas'}"
         cuerpo = (
             f"Hola,\n\n"
-            f"La {que} de {trabajo.get('cliente') or 'su trabajo'} ya está terminada.\n"
+            f"La {que} ya está terminada.\n"
+            f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
+            f"{('Cliente final: ' + final + chr(10)) if final else ''}"
             f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
-            f"{('Cliente final: ' + (trabajo.get('cliente_final') or '') + chr(10)) if trabajo.get('cliente_final') else ''}"
             f"\nUn saludo.\nAgenda Cortinas\n"
         )
     msg["From"] = origen
