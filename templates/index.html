@@ -237,6 +237,12 @@ function bindFiltros(){
     state.quienes=q; render();
   });
   document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
+  document.querySelectorAll("[data-borrar]").forEach(b=>b.onclick=async ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    if(!confirm("¿Borrar este trabajo? No se puede deshacer.")) return;
+    try{await api("/api/trabajos/"+b.dataset.borrar,{method:"DELETE"}); await load();}
+    catch(err){alert(err.message);}
+  });
 }
 function renderInstalador(){
   $("#app").innerHTML=`${header()}
@@ -297,7 +303,10 @@ function jobCard(t,big){
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
       <div class="meta">${escapeHtml([t.direccion,t.cp,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
       <div class="meta" style="font-size:17px;font-weight:700;color:var(--ink)">${escapeHtml(fmtCita(t))}</div>
-    </div><span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":ESTADOS[t.estado]}</span></div></article>`;
+    </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+      <span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":ESTADOS[t.estado]}</span>
+      ${esInst()?"":`<button type="button" class="btn btn-ghost" data-borrar="${t.id}" style="padding:6px 10px;font-size:13px">Borrar</button>`}
+    </div></div></article>`;
 }
 function citasSemana(){
   const start=ymd(state.weekStart), end=ymd(addDays(state.weekStart,6));
@@ -614,7 +623,7 @@ function openJob(id){
       <textarea id="notaInc" placeholder="Qué ha pasado, qué falta...">${escapeHtml(t.incidencia_nota||"")}</textarea>
       <button class="btn btn-primary btn-xl" id="guardarNotaInc">Guardar nota</button>
       <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>
-      <button class="btn btn-ghost btn-xl" id="cancelarInc">No era incidencia: está terminada</button>`:""}
+      <button class="btn btn-ghost btn-xl" id="cancelarInc">Me he equivocado: no era incidencia</button>`:""}
     ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
     ${(t.estado==="finalizada"||t.estado==="facturado")?`<button class="btn btn-primary btn-xl" id="mailCli">Enviar correo a la tienda</button>`:""}
     ${!simple && t.estado==="finalizada"?`<button class="btn btn-sage btn-xl" id="facturar">Marcar FACTURADA</button>`:""}
@@ -689,7 +698,7 @@ function openJob(id){
   const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>{if(!confirm("¿Quitar el estado de facturado?")) return; patch(t.id,{estado:"finalizada"});};
   const ai=$("#abrirInc"); if(ai) ai.onclick=()=>{if(!confirm("¿Abrir una incidencia en este trabajo?")) return; patch(t.id,{estado:"incidencia"});};
   const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>{if(!confirm("¿La incidencia está acabada y el trabajo terminado?")) return; patch(t.id,{estado:"finalizada"});};
-  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia y el trabajo está terminado?")) return; patch(t.id,{estado:"finalizada"});};
+  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia? El trabajo volverá a Empezada.")) return; patch(t.id,{estado:"en_curso"});};
   const gn=$("#guardarNotaInc"); if(gn) gn.onclick=()=>patch(t.id,{incidencia_nota:$("#notaInc").value});
   const df=$("#deshacerFin"); if(df) df.onclick=()=>{if(!confirm("¿Este trabajo no estaba terminado?")) return; patch(t.id,{estado:"en_curso"});};
   const ds=$("#deshacerStart"); if(ds) ds.onclick=()=>{if(!confirm("¿Este trabajo aún no había empezado?")) return; patch(t.id,{estado:t.cita_fecha?"cita":"asignada"});};
@@ -759,10 +768,12 @@ function abrirAdjunto(a){
 }
 
 async function patch(id,body){
-  const res=await api("/api/trabajos/"+id,{method:"PATCH",body});
-  await load();
-  if(res.instalacion_creada){toast("Medidas terminadas. Ya está creada la instalación."); openJob(res.instalacion_creada.id);}
-  else openJob(id);
+  try{
+    const res=await api("/api/trabajos/"+id,{method:"PATCH",body});
+    await load();
+    if(res.instalacion_creada){toast("Medidas terminadas. Ya está creada la instalación."); openJob(res.instalacion_creada.id);}
+    else openJob(id);
+  }catch(err){alert(err.message);}
 }
 function toast(t){document.querySelectorAll(".toast").forEach(n=>n.remove()); const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),4000);}
 function urlB64ToUint8(b64){
