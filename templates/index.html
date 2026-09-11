@@ -304,7 +304,7 @@ function jobCard(t,big){
       <div class="meta">${escapeHtml([t.direccion,t.cp,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
       <div class="meta" style="font-size:17px;font-weight:700;color:var(--ink)">${escapeHtml(fmtCita(t))}</div>
     </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
-      <span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":ESTADOS[t.estado]}</span>
+      <span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":(t.estado==="incidencia"&&t.cita_fecha?"Incidencia citada":ESTADOS[t.estado])}</span>
       ${esInst()?"":`<button type="button" class="btn btn-danger" data-borrar="${t.id}" style="padding:8px 12px;font-size:13px">Borrar</button>`}
     </div></div></article>`;
 }
