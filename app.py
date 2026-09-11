@@ -129,6 +129,31 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
                 f"\nVolveremos a citar para terminar el trabajo.\n\n"
                 f"Un saludo.\nAgenda Cortinas\n"
             )
+        elif motivo == "incidencia_cita":
+            cf = trabajo.get("cita_fecha") or ""
+            if len(cf) >= 10 and cf[4] == "-":
+                cf = cf[8:10] + "/" + cf[5:7] + "/" + cf[0:4]
+            cuando = f"{cf} {trabajo.get('cita_hora') or ''}".strip()
+            msg["Subject"] = f"Incidencia citada — {quien or 'Agenda Cortinas'}"
+            cuerpo = (
+                f"Hola,\n\n"
+                f"La incidencia ya está citada.\n"
+                f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
+                f"{('Cliente final: ' + final + chr(10)) if final else ''}"
+                f"{('Día: ' + cuando + chr(10)) if cuando else ''}"
+                f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+                f"\nUn saludo.\nAgenda Cortinas\n"
+            )
+        elif motivo == "incidencia_fin":
+            msg["Subject"] = f"Incidencia terminada — {quien or 'Agenda Cortinas'}"
+            cuerpo = (
+                f"Hola,\n\n"
+                f"La incidencia está terminada.\n"
+                f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
+                f"{('Cliente final: ' + final + chr(10)) if final else ''}"
+                f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+                f"\nUn saludo.\nAgenda Cortinas\n"
+            )
         else:
             msg["Subject"] = f"{que.capitalize()} terminada — {quien or 'Agenda Cortinas'}"
             cuerpo = (
@@ -1074,7 +1099,8 @@ def api_actualizar(trabajo_id: str):
                     tipo="finalizada",
                 )
             if trabajo.get("email"):
-                aviso = enviar_correo_cliente(trabajo, fase_txt)
+                motivo_fin = "incidencia_fin" if anterior == "incidencia" else "terminada"
+                aviso = enviar_correo_cliente(trabajo, fase_txt, motivo=motivo_fin)
                 add_msg(trabajo, user, "Correo al cliente: " + aviso)
             if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
                 inst_job = crear_instalacion_desde(trabajo, user)
@@ -1130,7 +1156,8 @@ def api_actualizar(trabajo_id: str):
         extra = f" — {trabajo['cita_nota']}" if trabajo["cita_nota"] else ""
         add_msg(trabajo, user, f"Cita: {cuando}{extra}")
         if body.get("enviar_correo_cita") and trabajo.get("email"):
-            aviso = enviar_correo_cliente(trabajo, fase_txt, motivo="cita")
+            motivo_cita = "incidencia_cita" if trabajo.get("estado") == "incidencia" else "cita"
+            aviso = enviar_correo_cliente(trabajo, fase_txt, motivo=motivo_cita)
             add_msg(trabajo, user, "Correo de cita: " + aviso)
         add_alerta(
             db,
