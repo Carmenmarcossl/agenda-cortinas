@@ -296,6 +296,7 @@ def load_db() -> dict:
         t.setdefault("telefono_final2", "")
         t.setdefault("tareas", [])
         t.setdefault("rieles", "")
+        t.setdefault("rieles_incidencia", "")
         t.setdefault("asignado_el", "")
         t.setdefault("ultimo_recordatorio", "")
         t.setdefault("rieles", "")
@@ -1042,7 +1043,10 @@ def api_actualizar(trabajo_id: str):
         if nuevo == "facturado" and user["rol"] != "dueno":
             return jsonify({"error": "Solo el dueño puede marcar facturado"}), 403
         if nuevo == "finalizada" and trabajo.get("fase") == "instalacion":
-            if not str(trabajo.get("rieles") or body.get("rieles") or "").strip():
+            if trabajo.get("estado") == "incidencia":
+                if not str(trabajo.get("rieles_incidencia") or body.get("rieles_incidencia") or "").strip():
+                    return jsonify({"error": "Pon los trabajos realizados en la incidencia"}), 400
+            elif not str(trabajo.get("rieles") or body.get("rieles") or "").strip():
                 return jsonify({"error": "Pon cuántos rieles se han instalado antes de terminar"}), 400
         anterior = trabajo["estado"]
         if nuevo == "incidencia" and anterior != "incidencia":
@@ -1134,10 +1138,10 @@ def api_actualizar(trabajo_id: str):
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "rieles"):
+    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "rieles", "rieles_incidencia"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
-        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles"):
+        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles", "rieles_incidencia"):
             trabajo[field] = (body.get(field) or "").strip()
     if "tareas" in body:
         trabajo["tareas"] = [str(x).strip() for x in (body.get("tareas") or []) if str(x).strip()]
