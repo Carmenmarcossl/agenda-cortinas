@@ -136,6 +136,12 @@ function fmtCita(t){
   const p=t.cita_fecha.split("-");
   const d=String(parseInt(p[2]||"0",10));
   const m=String(parseInt(p[1]||"0",10));
+  if(t.estado==="incidencia"){
+    let s="Citada la incidencia el día "+d+" del "+m;
+    if(t.cita_hora) s+=" a las "+hora12(t.cita_hora);
+    if(t.asignado_nombre) s+=" para "+t.asignado_nombre;
+    return s;
+  }
   let s="Citado el día "+d+" del "+m;
   if(t.cita_hora) s+=" a las "+hora12(t.cita_hora);
   if(t.asignado_nombre) s+=" para "+t.asignado_nombre;
@@ -596,7 +602,7 @@ function openJob(id){
     </div>
     ${!simple && t.estado!=="finalizada" && !t.asignado_a?`<label>Mandar a</label><select id="selInst">${instOptions("")}</select>
       <button class="btn btn-primary btn-xl" id="enviar">Enviar a este instalador</button>`:""}
-    ${t.estado!=="finalizada" && t.estado!=="incidencia"?`<button class="btn btn-ghost btn-xl" id="cita">Poner día y hora</button>
+    ${t.estado!=="finalizada" && t.estado!=="incidencia"?`<button class="btn btn-ghost btn-xl" id="cita">${t.estado==="incidencia"?"Poner día y hora para la incidencia":"Poner día y hora"}</button>
       <div id="citaBox" hidden>
         <label>Día</label><input type="date" id="citaFecha" value="${t.cita_fecha||""}">
         <label>Hora</label><input type="time" id="citaHora" value="${t.cita_hora||""}">
@@ -622,7 +628,7 @@ function openJob(id){
       <label>Notas de la incidencia</label>
       <textarea id="notaInc" placeholder="Qué ha pasado, qué falta...">${escapeHtml(t.incidencia_nota||"")}</textarea>
       <button class="btn btn-primary btn-xl" id="guardarNotaInc">Guardar nota</button>
-      <button class="btn btn-ghost btn-xl" id="cita">Poner día y hora</button>
+      <button class="btn btn-ghost btn-xl" id="cita">${t.estado==="incidencia"?"Poner día y hora para la incidencia":"Poner día y hora"}</button>
       <div id="citaBox" hidden>
         <label>Día</label><input type="date" id="citaFecha" value="${t.cita_fecha||""}">
         <label>Hora</label><input type="time" id="citaHora" value="${t.cita_hora||""}">
