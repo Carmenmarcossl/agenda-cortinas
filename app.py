@@ -116,15 +116,29 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
             f"\nUn saludo.\nAgenda Cortinas\n"
         )
     else:
-        msg["Subject"] = f"{que.capitalize()} terminada — {quien or 'Agenda Cortinas'}"
-        cuerpo = (
-            f"Hola,\n\n"
-            f"La {que} ya está terminada.\n"
-            f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
-            f"{('Cliente final: ' + final + chr(10)) if final else ''}"
-            f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
-            f"\nUn saludo.\nAgenda Cortinas\n"
-        )
+        if motivo == "incidencia":
+            msg["Subject"] = f"Incidencia — {quien or 'Agenda Cortinas'}"
+            nota = (trabajo.get("incidencia_nota") or "").strip()
+            cuerpo = (
+                f"Hola,\n\n"
+                f"Hay una incidencia en la {que}.\n"
+                f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
+                f"{('Cliente final: ' + final + chr(10)) if final else ''}"
+                f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+                f"{('Nota: ' + nota + chr(10)) if nota else ''}"
+                f"\nVolveremos a citar para terminar el trabajo.\n\n"
+                f"Un saludo.\nAgenda Cortinas\n"
+            )
+        else:
+            msg["Subject"] = f"{que.capitalize()} terminada — {quien or 'Agenda Cortinas'}"
+            cuerpo = (
+                f"Hola,\n\n"
+                f"La {que} ya está terminada.\n"
+                f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
+                f"{('Cliente final: ' + final + chr(10)) if final else ''}"
+                f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+                f"\nUn saludo.\nAgenda Cortinas\n"
+            )
     msg["From"] = origen
     msg["To"] = destino
     copia = (os.environ.get("MAIL_COPY") or "victor@carmenmarcossl.es").strip()
@@ -1037,6 +1051,9 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=trabajo["id"],
                     tipo="incidencia",
                 )
+            if trabajo.get("email"):
+                aviso = enviar_correo_cliente(trabajo, fase_txt, motivo="incidencia")
+                add_msg(trabajo, user, "Correo de incidencia: " + aviso)
         if nuevo == "finalizada" and anterior != "finalizada":
             if anterior == "incidencia":
                 add_msg(trabajo, user, "Incidencia acabada. Instalación terminada.")
