@@ -305,7 +305,7 @@ function jobCard(t,big){
       <div class="meta" style="font-size:17px;font-weight:700;color:var(--ink)">${escapeHtml(fmtCita(t))}</div>
     </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
       <span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":ESTADOS[t.estado]}</span>
-      ${esInst()?"":`<button type="button" class="btn btn-ghost" data-borrar="${t.id}" style="padding:6px 10px;font-size:13px">Borrar</button>`}
+      ${esInst()?"":`<button type="button" class="btn btn-danger" data-borrar="${t.id}" style="padding:8px 12px;font-size:13px">Borrar</button>`}
     </div></div></article>`;
 }
 function citasSemana(){
@@ -698,7 +698,7 @@ function openJob(id){
   const dfac=$("#deshacerFac"); if(dfac) dfac.onclick=()=>{if(!confirm("¿Quitar el estado de facturado?")) return; patch(t.id,{estado:"finalizada"});};
   const ai=$("#abrirInc"); if(ai) ai.onclick=()=>{if(!confirm("¿Abrir una incidencia en este trabajo?")) return; patch(t.id,{estado:"incidencia"});};
   const ci=$("#cerrarInc"); if(ci) ci.onclick=()=>{if(!confirm("¿La incidencia está acabada y el trabajo terminado?")) return; patch(t.id,{estado:"finalizada"});};
-  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia? El trabajo volverá a Empezada.")) return; patch(t.id,{estado:"en_curso"});};
+  const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia? Volverá al estado de antes (cita, por citar o empezada).")) return; patch(t.id,{estado:"deshacer_incidencia"});};
   const gn=$("#guardarNotaInc"); if(gn) gn.onclick=()=>patch(t.id,{incidencia_nota:$("#notaInc").value});
   const df=$("#deshacerFin"); if(df) df.onclick=()=>{if(!confirm("¿Este trabajo no estaba terminado?")) return; patch(t.id,{estado:"en_curso"});};
   const ds=$("#deshacerStart"); if(ds) ds.onclick=()=>{if(!confirm("¿Este trabajo aún no había empezado?")) return; patch(t.id,{estado:t.cita_fecha?"cita":"asignada"});};
