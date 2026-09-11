@@ -618,10 +618,17 @@ function openJob(id){
       <button class="btn btn-ghost btn-xl" type="button" id="guardarRieles">Guardar cantidad</button>
       <div class="error" id="errRieles"></div>
     </div>`:""}
-    ${t.estado==="incidencia"?`<p class="detalle"><b>Incidencia abierta.</b> Escribe qué pasa y sube fotos. Si pulaste por error, corrígela.</p>
+    ${t.estado==="incidencia"?`<p class="detalle"><b>Incidencia abierta.</b> Hay que volver a esa casa. Pon día y hora, y cuando esté resuelta: Incidencia acabada.</p>
       <label>Notas de la incidencia</label>
       <textarea id="notaInc" placeholder="Qué ha pasado, qué falta...">${escapeHtml(t.incidencia_nota||"")}</textarea>
       <button class="btn btn-primary btn-xl" id="guardarNotaInc">Guardar nota</button>
+      <button class="btn btn-ghost btn-xl" id="cita">Poner día y hora</button>
+      <div id="citaBox" hidden>
+        <label>Día</label><input type="date" id="citaFecha" value="${t.cita_fecha||""}">
+        <label>Hora</label><input type="time" id="citaHora" value="${t.cita_hora||""}">
+        <label>Nota</label><input id="citaNota" value="${escapeHtml(t.cita_nota||"")}">
+        <button class="btn btn-primary btn-xl" id="guardarCita">Guardar cita</button>
+      </div>
       <button class="btn btn-sage btn-xl" id="cerrarInc">Incidencia acabada</button>
       <button class="btn btn-ghost btn-xl" id="cancelarInc">Me he equivocado: no era incidencia</button>`:""}
     ${t.estado==="finalizada"?`<button class="btn btn-ghost btn-xl" id="deshacerFin">Me he equivocado: no estaba terminada</button>`:""}
