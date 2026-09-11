@@ -985,6 +985,19 @@ def api_actualizar(trabajo_id: str):
 
     if "estado" in body:
         nuevo = body["estado"]
+        if nuevo == "deshacer_incidencia":
+            previo = trabajo.get("estado_prev") or ""
+            if previo not in STATUSES or previo == "incidencia":
+                if trabajo.get("cita_fecha"):
+                    previo = "cita"
+                else:
+                    previo = "asignada" if trabajo.get("asignado_a") else "nueva"
+            trabajo["estado"] = previo
+            trabajo["estado_prev"] = ""
+            add_msg(trabajo, user, "Incidencia cancelada. Sigue como estaba.")
+            trabajo["actualizado"] = now_iso()
+            save_db(db)
+            return jsonify({"trabajo": trabajo, "instalacion_creada": None})
         if nuevo not in STATUSES:
             return jsonify({"error": "Estado no válido"}), 400
         if nuevo == "facturado" and user["rol"] != "dueno":
@@ -993,6 +1006,8 @@ def api_actualizar(trabajo_id: str):
             if not str(trabajo.get("rieles") or body.get("rieles") or "").strip():
                 return jsonify({"error": "Pon cuántos rieles se han instalado antes de terminar"}), 400
         anterior = trabajo["estado"]
+        if nuevo == "incidencia" and anterior != "incidencia":
+            trabajo["estado_prev"] = anterior
         trabajo["estado"] = nuevo
         if nuevo == "en_curso" and anterior != "en_curso":
             add_msg(trabajo, user, f"Empezado ({fase_txt}).")
