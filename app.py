@@ -323,7 +323,7 @@ def aligerar_pdf(path: Path) -> None:
         return
     try:
         original = path.stat().st_size
-        if original < 2 * 1024 * 1024:
+        if original < 300 * 1024:
             return
         reader = PdfReader(str(path))
         writer = PdfWriter()
@@ -333,8 +333,10 @@ def aligerar_pdf(path: Path) -> None:
             except Exception:
                 pass
             writer.add_page(page)
-        if reader.metadata:
-            writer.add_metadata(reader.metadata)
+        try:
+            writer.compress_identical_objects()
+        except Exception:
+            pass
         tmp = path.with_suffix(".min.pdf")
         with tmp.open("wb") as f:
             writer.write(f)
