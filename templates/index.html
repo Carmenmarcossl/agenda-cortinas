@@ -781,18 +781,44 @@ async function pintarPdf(url, caja){
   }
   const pdf=await window.pdfjsLib.getDocument({url,withCredentials:true}).promise;
   caja.innerHTML="";
+  const w=Math.max(280, caja.clientWidth||320);
   for(let i=1;i<=pdf.numPages;i++){
     const page=await pdf.getPage(i);
     const unscaled=page.getViewport({scale:1});
-    const scale=Math.min(1.6, Math.max(0.8,(caja.clientWidth||320)/unscaled.width));
+    const scale=Math.min(1.15, w/unscaled.width);
     const vp=page.getViewport({scale});
     const canvas=document.createElement("canvas");
     canvas.width=vp.width; canvas.height=vp.height;
-    canvas.style.width="100%"; canvas.style.margin="0 0 14px";
-    canvas.style.touchAction="pinch-zoom";
+    canvas.style.width="100%"; canvas.style.maxWidth="100%"; canvas.style.margin="0 0 14px";
     caja.appendChild(canvas);
     await page.render({canvasContext:canvas.getContext("2d"),viewport:vp}).promise;
   }
+}
+function activarZoom(caja){
+  let z=1, dist0=0, z0=1;
+  const apply=()=>{caja.style.transform="scale("+z+")"; caja.style.transformOrigin="top center";};
+  const setZ=n=>{z=Math.max(0.4,Math.min(2.8,n)); apply();};
+  const mas=$("#pdfMas"); if(mas) mas.onclick=()=>setZ(z+0.2);
+  const menos=$("#pdfMenos"); if(menos) menos.onclick=()=>setZ(z-0.2);
+  caja.addEventListener("wheel",e=>{
+    e.preventDefault();
+    setZ(z+(e.deltaY<0?0.12:-0.12));
+  },{passive:false});
+  caja.addEventListener("touchstart",e=>{
+    if(e.touches.length===2){
+      const a=e.touches[0], b=e.touches[1];
+      dist0=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+      z0=z;
+    }
+  },{passive:true});
+  caja.addEventListener("touchmove",e=>{
+    if(e.touches.length===2 && dist0){
+      e.preventDefault();
+      const a=e.touches[0], b=e.touches[1];
+      const d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+      setZ(z0*(d/dist0));
+    }
+  },{passive:false});
 }
 function abrirAdjunto(a){
   if(!a||!a.url) return;
@@ -805,19 +831,22 @@ function abrirAdjunto(a){
   const esImagen=!esPdf(a);
   visor.innerHTML=`<div class="visor-box">
     <div class="visor-bar">
-      <strong>${escapeHtml(a.nombre||(esImagen?"Foto":"PDF"))}</strong>
       <button class="btn btn-primary" type="button" id="cerrarPdf">Volver</button>
+      <button class="btn" type="button" id="pdfMenos">Más pequeño</button>
+      <button class="btn" type="button" id="pdfMas">Más grande</button>
     </div>
-    ${esImagen?`<div class="visor-zoom" style="touch-action:pinch-zoom"><img src="${escapeHtml(a.url)}" alt=""></div>`:`<div class="visor-zoom" id="cajaPdf" style="touch-action:pinch-zoom;padding:8px"><p class="meta">Cargando las hojas…</p></div>`}
+    <div class="visor-zoom">
+      ${esImagen?`<div id="cajaPdf"><img src="${escapeHtml(a.url)}" alt="" style="width:100%"></div>`:`<div id="cajaPdf"><p class="meta">Cargando las hojas…</p></div>`}
+    </div>
   </div>`;
   visor.showModal();
   const cerrar=()=>{try{visor.close();}catch(e){} visor.innerHTML="";};
   $("#cerrarPdf").onclick=cerrar;
   visor.addEventListener("cancel", e=>{e.preventDefault(); cerrar();},{once:true});
+  const caja=$("#cajaPdf");
+  activarZoom(caja);
   if(!esImagen){
-    pintarPdf(a.url,$("#cajaPdf")).catch(()=>{
-      $("#cajaPdf").innerHTML="<p class=\"meta\">No se han podido mostrar las hojas.</p>";
-    });
+    pintarPdf(a.url,caja).catch(()=>{caja.innerHTML="<p class='meta'>No se han podido mostrar las hojas.</p>";});
   }
 }
 
