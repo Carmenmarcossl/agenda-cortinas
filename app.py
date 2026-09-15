@@ -1266,10 +1266,12 @@ def api_leer_alertas():
     body = request.get_json(silent=True) or {}
     alerta_id = body.get("id")
     db = load_db()
-    for a in alertas_de(db, user):
-        if alerta_id and a["id"] != alerta_id:
-            continue
-        a["leida"] = True
+    mias = {a["id"] for a in alertas_de(db, user)}
+    if alerta_id:
+        if alerta_id in mias:
+            db["alertas"] = [a for a in db["alertas"] if a["id"] != alerta_id]
+    else:
+        db["alertas"] = [a for a in db["alertas"] if a["id"] not in mias]
     save_db(db)
     return jsonify({"ok": True})
 
