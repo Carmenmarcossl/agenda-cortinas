@@ -529,7 +529,7 @@ function openAlertas(){
     ${items.length?items.map(a=>`<div class="alert-item" data-id="${a.id}" data-tid="${a.trabajo_id}">${escapeHtml(a.texto)}<div class="meta">${fmtFecha(a.fecha)}</div></div>`).join(""):`<p class="meta">No hay avisos.</p>`}
     <div class="actions"><button class="btn btn-ghost" id="leerTodas">Ya los he visto</button><button class="btn btn-ghost" id="cerrarA">Cerrar</button></div></div>`;
   dlg.showModal(); $("#cerrarA").onclick=()=>dlg.close();
-  $("#leerTodas").onclick=async()=>{await api("/api/alertas/leer",{method:"POST",body:{}}); await load(); openAlertas();};
+  $("#leerTodas").onclick=async()=>{await api("/api/alertas/leer",{method:"POST",body:{}}); await load(); dlg.close();};
   dlg.querySelectorAll(".alert-item").forEach(el=>el.onclick=async()=>{ await api("/api/alertas/leer",{method:"POST",body:{id:el.dataset.id}}); dlg.close(); if(el.dataset.tid) openJob(el.dataset.tid); await load(); });
 }
 
