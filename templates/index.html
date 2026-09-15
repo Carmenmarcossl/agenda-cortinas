@@ -610,8 +610,8 @@ function openJob(id){
         <label>Nota</label><input id="citaNota" value="${escapeHtml(t.cita_nota||"")}">
         <button class="btn btn-primary btn-xl" id="guardarCita">Guardar cita</button>
       </div>
-      ${t.estado!=="nueva"?`<button class="btn btn-sage btn-xl" id="empezar">Marcar EMPEZADA</button>`:""}
-      <button class="btn btn-sage btn-xl" id="fin">Marcar TERMINADA</button>
+      ${t.estado!=="nueva"?`<button class="btn btn-sage btn-xl" id="empezar">${t.fase==="instalacion"?"Instalación EMPEZADA":"Toma de medidas EMPEZADA"}</button>`:""}
+      <button class="btn btn-sage btn-xl" id="fin">${t.fase==="instalacion"?"Instalación TERMINADA":"Toma de medidas TERMINADA"}</button>
       ${t.fase==="instalacion"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}`:""}
     ${t.fase==="instalacion" && t.estado==="finalizada"?`<button class="btn btn-primary btn-xl" id="abrirInc">Incidencia</button>`:""}
     ${t.fase==="reparto"?`<div class="bloque"><h3>Notas del reparto</h3>
