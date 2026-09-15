@@ -103,7 +103,8 @@
     .visor-box{background:#1b140f;color:#fff;min-height:100dvh;display:flex;flex-direction:column}
     .visor-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));background:#2a1d14;position:sticky;top:0;z-index:2}
     .visor-bar strong{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .visor-box iframe,.visor-box embed{flex:1;width:100%;border:0;background:#fff;min-height:70vh}
+    .visor-zoom{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff}
+    .visor-box iframe,.visor-box embed{width:100%;height:80vh;border:0;background:#fff;transform-origin:top left}
     .visor-box img{flex:1;width:100%;height:auto;max-height:calc(100dvh - 64px);object-fit:contain;background:#1b140f;padding:8px}
     @media(max-width:800px){
       .stats{grid-template-columns:repeat(2,1fr)}
@@ -777,18 +778,28 @@ function abrirAdjunto(a){
     document.body.appendChild(visor);
   }
   const esImagen=!esPdf(a);
+  const url=a.url+(esImagen?"":"#view=FitH&toolbar=1&navpanes=1");
   const cuerpo=esImagen
     ?`<img src="${escapeHtml(a.url)}" alt="${escapeHtml(a.nombre||"foto")}">`
-    :`<iframe src="${escapeHtml(a.url)}" title="PDF"></iframe>`;
+    :`<div class="visor-zoom"><iframe id="framePdf" src="${escapeHtml(url)}" title="PDF"></iframe></div>`;
   visor.innerHTML=`<div class="visor-box">
     <div class="visor-bar">
       <strong>${escapeHtml(a.nombre||(esImagen?"Foto":"documento.pdf"))}</strong>
-      <button class="btn btn-primary" type="button" id="cerrarPdf">Cerrar</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${esImagen?"":`<button class="btn btn-ghost" type="button" id="pdfMenos">−</button>
+        <button class="btn btn-ghost" type="button" id="pdfMas">+</button>
+        <a class="btn btn-ghost" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">Abrir completo</a>`}
+        <button class="btn btn-primary" type="button" id="cerrarPdf">Cerrar</button>
+      </div>
     </div>
     ${cuerpo}
   </div>`;
   visor.showModal();
-  const cerrar=()=>{visor.close(); visor.innerHTML="";};
+  let z=1;
+  const apply=()=>{const f=$("#framePdf"); if(f) f.style.transform="scale("+z+")";};
+  const mas=$("#pdfMas"); if(mas) mas.onclick=()=>{z=Math.min(2.4,z+0.2); apply();};
+  const menos=$("#pdfMenos"); if(menos) menos.onclick=()=>{z=Math.max(0.6,z-0.2); apply();};
+  const cerrar=()=>{try{visor.close();}catch(e){} visor.innerHTML="";};
   $("#cerrarPdf").onclick=cerrar;
   visor.addEventListener("cancel", e=>{e.preventDefault(); cerrar();},{once:true});
 }
