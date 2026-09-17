@@ -1142,6 +1142,11 @@ def api_actualizar(trabajo_id: str):
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
 
+    if user["rol"] == "dueno" and body.get("fase") in FASES:
+        anterior_fase = trabajo.get("fase")
+        trabajo["fase"] = body["fase"]
+        if anterior_fase != trabajo["fase"]:
+            add_msg(trabajo, user, "Cambiado a " + ("reparto" if trabajo["fase"]=="reparto" else ("toma de medidas" if trabajo["fase"]=="medidas" else "instalación")) + ".")
     for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "rieles", "rieles_incidencia"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
