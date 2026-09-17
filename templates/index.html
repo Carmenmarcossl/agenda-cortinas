@@ -151,6 +151,16 @@ function fmtCita(t){
   return s;
 }
 function fmtFecha(iso){if(!iso) return ""; const d=new Date(iso.replace(" ","T")); return Number.isNaN(d.getTime())?iso:d.toLocaleString("es-ES",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}
+function fmtCreado(iso){
+  if(!iso) return "—";
+  const d=new Date(String(iso).replace(" ","T"));
+  if(Number.isNaN(d.getTime())){
+    const p=String(iso).slice(0,10).split("-");
+    if(p.length===3) return p[2]+"/"+p[1]+"/"+p[0];
+    return String(iso).slice(0,10);
+  }
+  return d.toLocaleDateString("es-ES",{day:"numeric",month:"numeric",year:"numeric"});
+}
 function escapeHtml(s){return String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
 function unread(){return (state.alertas||[]).filter(a=>!a.leida);}
 function esInst(){return state.user && state.user.rol==="instalador";}
@@ -311,6 +321,7 @@ function jobCard(t,big){
       <span class="fase">${FASES[t.fase]}</span>${t.estado==="incidencia"?`<span class="badge s-incidencia">Incidencia</span>`:""}<h3>${escapeHtml(t.cliente)}</h3>
       ${t.cliente_final?`<div class="meta">Cliente final: ${escapeHtml(t.cliente_final)}</div>`:""}
       <div class="meta">${escapeHtml([t.direccion,t.cp,t.localidad].filter(Boolean).join(", "))}${t.telefono?" · "+escapeHtml(t.telefono):""}</div>
+      <div class="meta">Creado el ${escapeHtml(fmtCreado(t.creado))}</div>
       <div class="meta" style="font-size:17px;font-weight:700;color:var(--ink)">${escapeHtml(fmtCita(t))}</div>
     </div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
       <span class="badge ${t.fase==="reparto"?"s-cita":"s-"+t.estado}">${t.fase==="reparto"?"Reparto":(t.estado==="incidencia"&&t.cita_fecha?"Incidencia citada":ESTADOS[t.estado])}</span>
@@ -712,8 +723,9 @@ function openJob(id){
   const fin=$("#fin"); if(fin) fin.onclick=()=>{
     const rieles=t.fase==="instalacion"?(($("#datoRieles")&&$("#datoRieles").value)||t.rieles||"").trim():"ok";
     if(t.fase==="instalacion" && !rieles){alert("Antes de terminar pon cuántos rieles se han instalado."); $("#datoRieles")&&$("#datoRieles").focus(); return;}
-    if(!confirm(t.email?"¿Está terminado? Se enviará un correo a "+t.email:"¿Está terminado este trabajo? No hay email de la tienda.")) return;
-    patch(t.id,{estado:"finalizada",rieles:t.fase==="instalacion"?rieles:undefined});
+    if(!confirm(t.fase==="instalacion"?"¿Instalación terminada?":"¿Toma de medidas terminada?")) return;
+    const mail=t.email?confirm("¿Enviar el correo a "+t.email+"?"):false;
+    patch(t.id,{estado:"finalizada",rieles:t.fase==="instalacion"?rieles:undefined,enviar_correo_fin:!!mail});
   };
   const mail=$("#mailCli"); if(mail) mail.onclick=()=>{if(!t.email){alert("Falta el email de la tienda"); return;} if(!confirm("¿Enviar el correo a "+t.email+"?")) return; patch(t.id,{enviar_correo:true});};
   const fac=$("#facturar"); if(fac) fac.onclick=()=>{if(!confirm("¿Marcar este trabajo como FACTURADO?")) return; patch(t.id,{estado:"facturado"});};
@@ -724,7 +736,8 @@ function openJob(id){
     const v=(($("#datoRielesInc")&&$("#datoRielesInc").value)||t.rieles_incidencia||"").trim();
     if(!v){alert("Antes de cerrar la incidencia pon los trabajos realizados."); $("#datoRielesInc")&&$("#datoRielesInc").focus(); return;}
     if(!confirm("¿La incidencia está acabada y el trabajo terminado?")) return;
-    patch(t.id,{estado:"finalizada",rieles_incidencia:v});
+    const mail=t.email?confirm("¿Enviar el correo a "+t.email+"?"):false;
+    patch(t.id,{estado:"finalizada",rieles_incidencia:v,enviar_correo_fin:!!mail});
   };
   const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia? Volverá al estado de antes (cita, por citar o empezada).")) return; patch(t.id,{estado:"deshacer_incidencia"});};
   const gn=$("#guardarNotaInc"); if(gn) gn.onclick=()=>patch(t.id,{incidencia_nota:$("#notaInc").value});
