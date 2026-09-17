@@ -587,7 +587,8 @@ function openJob(id){
       ${t.telefono_final?`<p class="meta">${escapeHtml(t.telefono_final)}</p>`:""}
       ${sitio?`<p class="meta">${escapeHtml(sitio)}</p>`:""}
     </div>
-    ${simple?"":`<button class="btn btn-ghost btn-xl" type="button" id="editarDatos">Editar datos</button>
+    ${simple?"":`${t.fase!=="reparto"?`<button class="btn btn-ghost btn-xl" type="button" id="cambiarFase">${t.fase==="instalacion"?"Esto es una TOMA DE MEDIDAS":"Esto es una INSTALACIÓN"}</button>`:""}
+    <button class="btn btn-ghost btn-xl" type="button" id="editarDatos">Editar datos</button>
     <div id="formDatos" hidden>
       <div class="bloque">
         <h3>Tienda</h3>
@@ -681,6 +682,12 @@ function openJob(id){
   </div>`;
   dlg.showModal();
   $("#cerrar").onclick=()=>{state.sel=null; dlg.close();};
+  const cf=$("#cambiarFase"); if(cf) cf.onclick=()=>{
+    const dest=t.fase==="instalacion"?"medidas":"instalacion";
+    const txt=dest==="medidas"?"toma de medidas":"instalación";
+    if(!confirm("¿Pasar este trabajo a "+txt+"? Se quedan tienda, fotos y cita.")) return;
+    patch(t.id,{fase:dest});
+  };
   const ed=$("#editarDatos"); if(ed) ed.onclick=()=>{const box=$("#formDatos"); if(box) box.hidden=false; ed.hidden=true;};
   const stj=$("#selTiendaJob");
   if(stj) stj.onchange=()=>{
