@@ -1104,10 +1104,12 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=trabajo["id"],
                     tipo="finalizada",
                 )
-            if trabajo.get("email"):
+            if trabajo.get("email") and body.get("enviar_correo_fin"):
                 motivo_fin = "incidencia_fin" if anterior == "incidencia" else "terminada"
                 aviso = enviar_correo_cliente(trabajo, fase_txt, motivo=motivo_fin)
                 add_msg(trabajo, user, "Correo al cliente: " + aviso)
+            elif trabajo.get("email"):
+                add_msg(trabajo, user, "Terminado sin enviar correo.")
             if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
                 inst_job = crear_instalacion_desde(trabajo, user)
                 trabajo["relacionado_id"] = inst_job["id"]
