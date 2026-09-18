@@ -96,6 +96,11 @@
     .weekbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
     .fab{position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:0;background:var(--terr);color:#fff;font-size:32px;box-shadow:0 10px 24px rgba(154,63,22,.35)}
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 16px;border-radius:14px;z-index:50;max-width:92%}
+    .ask-back{position:fixed;inset:0;background:rgba(20,12,8,.45);z-index:80;display:flex;align-items:center;justify-content:center;padding:18px}
+    .ask-box{background:#fff;border-radius:16px;padding:22px 18px 16px;max-width:420px;width:100%;box-shadow:0 16px 40px rgba(0,0,0,.25)}
+    .ask-box p{font-size:18px;font-weight:700;margin:0 0 16px;line-height:1.3}
+    .ask-box .row{display:flex;gap:10px}
+    .ask-box .row .btn{flex:1}
     .alert-item{padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
     .pdf-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin:8px 0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff;font-weight:700;cursor:pointer;text-align:left}
     #visorPdf{max-width:none;width:100%;height:100%;padding:0}
@@ -719,9 +724,9 @@ function openJob(id){
   const gt=$("#guardarTareas"); if(gt) gt.onclick=()=>patch(t.id,{tareas:[...document.querySelectorAll(".taTarea")].map(x=>x.value.trim()).filter(Boolean)});
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
   const cita=$("#cita"); if(cita) cita.onclick=()=>{$("#citaBox").hidden=false;};
-  const gc=$("#guardarCita"); if(gc) gc.onclick=()=>{
+  const gc=$("#guardarCita"); if(gc) gc.onclick=async()=>{
     const mail=t.email||"";
-    const ok=confirm(mail?"¿Guardar la cita y enviar correo a "+mail+"?":"¿Guardar la cita? No hay email de la tienda.");
+    const ok=await preguntar(mail?"¿Guardar la cita y enviar el correo a "+mail+"?":"¿Guardar la cita? No hay email de la tienda.");
     if(!ok) return;
     patch(t.id,{concertar_cita:true,enviar_correo_cita:!!mail,cita_fecha:$("#citaFecha").value,cita_hora:$("#citaHora").value,cita_nota:$("#citaNota").value});
   };
@@ -877,6 +882,18 @@ async function patch(id,body){
     if(res.instalacion_creada){toast("Medidas terminadas. Ya está creada la instalación."); openJob(res.instalacion_creada.id);}
     else openJob(id);
   }catch(err){alert(err.message);}
+}
+function preguntar(texto){
+  return new Promise(res=>{
+    document.querySelectorAll(".ask-back").forEach(n=>n.remove());
+    const wrap=document.createElement("div");
+    wrap.className="ask-back";
+    wrap.innerHTML=`<div class="ask-box"><p>${escapeHtml(texto)}</p><div class="row"><button type="button" class="btn btn-primary" id="askSi">Sí</button><button type="button" class="btn btn-ghost" id="askNo">No</button></div></div>`;
+    document.body.appendChild(wrap);
+    const fin=v=>{wrap.remove(); res(v);};
+    wrap.querySelector("#askSi").onclick=()=>fin(true);
+    wrap.querySelector("#askNo").onclick=()=>fin(false);
+  });
 }
 function toast(t){document.querySelectorAll(".toast").forEach(n=>n.remove()); const el=document.createElement("div"); el.className="toast"; el.textContent=t; document.body.appendChild(el); setTimeout(()=>el.remove(),4000);}
 function urlB64ToUint8(b64){
