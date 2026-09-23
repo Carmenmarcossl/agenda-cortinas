@@ -752,7 +752,12 @@ function openJob(id){
     patch(t.id,{estado:"finalizada",rieles_incidencia:v,enviar_correo_fin:!!mail});
   };
   const cai=$("#cancelarInc"); if(cai) cai.onclick=()=>{if(!confirm("¿No era una incidencia? Volverá al estado de antes (cita, por citar o empezada).")) return; patch(t.id,{estado:"deshacer_incidencia"});};
-  const gn=$("#guardarNotaInc"); if(gn) gn.onclick=()=>patch(t.id,{incidencia_nota:$("#notaInc").value});
+  const gn=$("#guardarNotaInc"); if(gn) gn.onclick=async()=>{
+    const nota=($("#notaInc")&&$("#notaInc").value||"").trim();
+    if(!nota){alert("Escribe qué ha ocurrido en la incidencia."); return;}
+    const mail=t.email?await preguntar("¿Enviar a "+t.email+" lo que ha ocurrido?"):false;
+    patch(t.id,{incidencia_nota:nota,enviar_correo_incidencia:!!mail});
+  };
   const df=$("#deshacerFin"); if(df) df.onclick=()=>{if(!confirm("¿Este trabajo no estaba terminado?")) return; patch(t.id,{estado:"en_curso"});};
   const ds=$("#deshacerStart"); if(ds) ds.onclick=()=>{if(!confirm("¿Este trabajo aún no había empezado?")) return; patch(t.id,{estado:t.cita_fecha?"cita":"asignada"});};
   const bor=$("#borrar"); if(bor) bor.onclick=async()=>{if(!confirm("¿Borrar este trabajo? No se puede deshacer."))return; await api("/api/trabajos/"+t.id,{method:"DELETE"}); dlg.close(); await load();};
