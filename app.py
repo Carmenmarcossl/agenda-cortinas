@@ -116,16 +116,17 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
             f"\nUn saludo.\nAgenda Cortinas\n"
         )
     else:
+        nota = (trabajo.get("incidencia_nota") or "").strip()
+        que_paso = f"Qué ha ocurrido:\n{nota}\n" if nota else ""
         if motivo == "incidencia":
             msg["Subject"] = f"Incidencia — {quien or 'Agenda Cortinas'}"
-            nota = (trabajo.get("incidencia_nota") or "").strip()
             cuerpo = (
                 f"Hola,\n\n"
                 f"Hay una incidencia en la {que}.\n"
                 f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
                 f"{('Cliente final: ' + final + chr(10)) if final else ''}"
                 f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
-                f"{('Nota: ' + nota + chr(10)) if nota else ''}"
+                f"{que_paso}"
                 f"\nVolveremos a citar para terminar el trabajo.\n\n"
                 f"Un saludo.\nAgenda Cortinas\n"
             )
@@ -142,6 +143,7 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
                 f"{('Cliente final: ' + final + chr(10)) if final else ''}"
                 f"{('Día: ' + cuando + chr(10)) if cuando else ''}"
                 f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+                f"{que_paso}"
                 f"\nUn saludo.\nAgenda Cortinas\n"
             )
         elif motivo == "incidencia_fin":
@@ -152,6 +154,7 @@ def enviar_correo_cliente(trabajo: dict, que: str, motivo: str = "terminada") ->
                 f"{('Tienda: ' + tienda + chr(10)) if tienda else ''}"
                 f"{('Cliente final: ' + final + chr(10)) if final else ''}"
                 f"{('Dirección: ' + sitio + chr(10)) if sitio else ''}"
+                f"{que_paso}"
                 f"\nUn saludo.\nAgenda Cortinas\n"
             )
         else:
@@ -1082,7 +1085,9 @@ def api_actualizar(trabajo_id: str):
                     trabajo_id=trabajo["id"],
                     tipo="incidencia",
                 )
-            if trabajo.get("email"):
+            nota_ya = (trabajo.get("incidencia_nota") or body.get("incidencia_nota") or "").strip()
+            if trabajo.get("email") and nota_ya:
+                trabajo["incidencia_nota"] = nota_ya
                 aviso = enviar_correo_cliente(trabajo, fase_txt, motivo="incidencia")
                 add_msg(trabajo, user, "Correo de incidencia: " + aviso)
         if nuevo == "finalizada" and anterior != "finalizada":
@@ -1141,6 +1146,10 @@ def api_actualizar(trabajo_id: str):
         trabajo["incidencia_nota"] = (body.get("incidencia_nota") or "").strip()
         if trabajo["incidencia_nota"]:
             add_msg(trabajo, user, "Nota incidencia: " + trabajo["incidencia_nota"])
+            if trabajo.get("estado") == "incidencia" and trabajo.get("email") and body.get("enviar_correo_incidencia"):
+                fase_inc = "instalación" if trabajo.get("fase") == "instalacion" else "toma de medidas"
+                aviso = enviar_correo_cliente(trabajo, fase_inc, motivo="incidencia")
+                add_msg(trabajo, user, "Correo de incidencia: " + aviso)
 
     if user["rol"] == "dueno" and body.get("fase") in FASES:
         anterior_fase = trabajo.get("fase")
