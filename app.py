@@ -423,6 +423,12 @@ def public_user(u: dict) -> dict:
     return {"usuario": u["usuario"], "nombre": u["nombre"], "rol": u["rol"], "email": u.get("email") or ""}
 
 
+def ficha_aviso(trabajo: dict) -> str:
+    tienda = (trabajo.get("cliente") or "").strip() or "un trabajo"
+    final = (trabajo.get("cliente_final") or "").strip()
+    return f"{tienda} ({final})" if final else tienda
+
+
 def add_alerta(db: dict, *, para: str, texto: str, trabajo_id: str, tipo: str) -> None:
     db["alertas"].insert(
         0,
@@ -592,7 +598,7 @@ def asignar(trabajo: dict, inst: dict, user: dict, db: dict, fase_txt: str) -> N
     add_alerta(
         db,
         para=inst["usuario"],
-        texto=f"Tienes un trabajo nuevo: {trabajo['cliente']} ({fase_txt}).",
+        texto=f"Tienes un trabajo nuevo: {ficha_aviso(trabajo)} ({fase_txt}).",
         trabajo_id=trabajo["id"],
         tipo="asignada",
     )
@@ -1062,7 +1068,7 @@ def api_actualizar(trabajo_id: str):
             add_alerta(
                 db,
                 para="dueno",
-                texto=f"{user['nombre']} ha empezado la {fase_txt} de {trabajo['cliente']}.",
+                texto=f"{user['nombre']} ha empezado la {fase_txt} de {ficha_aviso(trabajo)}.",
                 trabajo_id=trabajo["id"],
                 tipo="empezada",
             )
@@ -1073,7 +1079,7 @@ def api_actualizar(trabajo_id: str):
             add_alerta(
                 db,
                 para="dueno",
-                texto=f"Incidencia en la instalación de {trabajo['cliente']}.",
+                texto=f"Incidencia en la instalación de {ficha_aviso(trabajo)}.",
                 trabajo_id=trabajo["id"],
                 tipo="incidencia",
             )
@@ -1081,7 +1087,7 @@ def api_actualizar(trabajo_id: str):
                 add_alerta(
                     db,
                     para=trabajo["asignado_a"],
-                    texto=f"Hay una incidencia en {trabajo['cliente']}.",
+                    texto=f"Hay una incidencia en {ficha_aviso(trabajo)}.",
                     trabajo_id=trabajo["id"],
                     tipo="incidencia",
                 )
@@ -1096,7 +1102,7 @@ def api_actualizar(trabajo_id: str):
                 add_alerta(
                     db,
                     para="dueno",
-                    texto=f"{user['nombre']} ha cerrado la incidencia de {trabajo['cliente']}.",
+                    texto=f"{user['nombre']} ha cerrado la incidencia de {ficha_aviso(trabajo)}.",
                     trabajo_id=trabajo["id"],
                     tipo="incidencia_cerrada",
                 )
@@ -1105,7 +1111,7 @@ def api_actualizar(trabajo_id: str):
                 add_alerta(
                     db,
                     para="dueno",
-                    texto=f"{user['nombre']} ha terminado la {fase_txt} de {trabajo['cliente']}.",
+                    texto=f"{user['nombre']} ha terminado la {fase_txt} de {ficha_aviso(trabajo)}.",
                     trabajo_id=trabajo["id"],
                     tipo="finalizada",
                 )
@@ -1125,7 +1131,7 @@ def api_actualizar(trabajo_id: str):
                 add_alerta(
                     db,
                     para="dueno",
-                    texto=f"Medidas de {trabajo['cliente']} listas. Falta enviar la instalación.",
+                    texto=f"Medidas de {ficha_aviso(trabajo)} listas. Falta enviar la instalación.",
                     trabajo_id=inst_job["id"],
                     tipo="instalacion_lista",
                 )
@@ -1184,7 +1190,7 @@ def api_actualizar(trabajo_id: str):
         add_alerta(
             db,
             para="dueno",
-            texto=f"{user['nombre']} ha quedado con {trabajo['cliente']} el {cuando} ({fase_txt}).",
+            texto=f"{user['nombre']} ha quedado con {ficha_aviso(trabajo)} el {cuando} ({fase_txt}).",
             trabajo_id=trabajo["id"],
             tipo="cita",
         )
@@ -1192,7 +1198,7 @@ def api_actualizar(trabajo_id: str):
             add_alerta(
                 db,
                 para=trabajo["asignado_a"],
-                texto=f"Cita con {trabajo['cliente']} el {cuando} ({fase_txt}).",
+                texto=f"Cita con {ficha_aviso(trabajo)} el {cuando} ({fase_txt}).",
                 trabajo_id=trabajo["id"],
                 tipo="cita",
             )
@@ -1242,7 +1248,7 @@ def api_foto(trabajo_id: str):
         add_alerta(
             db,
             para="dueno",
-            texto=f"{user['nombre']} ha subido un archivo de {trabajo['cliente']}.",
+            texto=f"{user['nombre']} ha subido un archivo de {ficha_aviso(trabajo)}.",
             trabajo_id=trabajo["id"],
             tipo="foto",
         )
