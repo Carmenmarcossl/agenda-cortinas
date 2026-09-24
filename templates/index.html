@@ -128,7 +128,7 @@
 const ESTADOS = {nueva:"Sin enviar",asignada:"Por citar",cita:"Con cita",en_curso:"Empezada",incidencia:"Incidencia",finalizada:"Terminada",facturado:"Facturada"};
 const FASES = {medidas:"Medir",instalacion:"Instalar",reparto:"Reparto"};
 const DIAS = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
-const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtros:["activos"],fases:["todas"],quienes:[],weekStart:monday(new Date()),sel:null,error:""};
+const state = {user:null,trabajos:[],alertas:[],instaladores:[],clientes:[],enlaces:[],vista:"lista",filtros:["activos"],fases:["todas"],quienes:[],tiendas:[],weekStart:monday(new Date()),sel:null,error:""};
 const $ = (s,el=document)=>el.querySelector(s);
 function monday(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x;}
 function ymd(d){const x=new Date(d); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");}
@@ -195,6 +195,8 @@ function filtered(){
     if(!fs.includes("todas") && !fs.includes(t.fase)) return false;
     const qs=state.quienes||[];
     if(qs.length && !qs.includes(t.asignado_a||"")) return false;
+    const ts=state.tiendas||[];
+    if(ts.length && !ts.includes(t.cliente||"")) return false;
     const fl=state.filtros||["activos"];
     if(fl.includes("todos")) return true;
     return fl.some(f=>{
@@ -246,11 +248,20 @@ function bindCommon(){
   $("#btnBell").onclick=openAlertas;
 }
 
+function listaTiendas(){
+  const seen=new Set();
+  const out=[];
+  (state.clientes||[]).forEach(c=>{const n=(c.nombre||"").trim(); if(n&&!seen.has(n)){seen.add(n); out.push(n);}});
+  (state.trabajos||[]).forEach(t=>{const n=(t.cliente||"").trim(); if(n&&!seen.has(n)){seen.add(n); out.push(n);}});
+  return out.sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+}
 function chipsFiltro(){
   const inst=state.instaladores||[];
+  const shops=listaTiendas();
   return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${(state.filtros||[]).includes(k)?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
     <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"],["reparto","Reparto"]].map(([k,l])=>`<button class="chip ${(state.fases||[]).includes(k)?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>
-    ${esInst()?"":`<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips"><button class="chip ${!(state.quienes||[]).length?"on":""}" data-quien="">Todos</button>${inst.map(u=>`<button class="chip ${(state.quienes||[]).includes(u.usuario)?"on":""}" data-quien="${u.usuario}">${escapeHtml(u.nombre)}</button>`).join("")}</div></div>`}`;
+    ${esInst()?"":`<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips"><button class="chip ${!(state.quienes||[]).length?"on":""}" data-quien="">Todos</button>${inst.map(u=>`<button class="chip ${(state.quienes||[]).includes(u.usuario)?"on":""}" data-quien="${u.usuario}">${escapeHtml(u.nombre)}</button>`).join("")}</div></div>`}
+    <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips"><button class="chip ${!(state.tiendas||[]).length?"on":""}" data-tienda="">Todas las tiendas</button>${shops.map(n=>`<button class="chip ${(state.tiendas||[]).includes(n)?"on":""}" data-tienda="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join("")}</div></div>`;
 }
 function bindFiltros(){
   document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{state.filtros=toggleFiltro(state.filtros,b.dataset.f,"todos"); render();});
@@ -261,6 +272,13 @@ function bindFiltros(){
     let q=state.quienes||[];
     q=q.includes(v)?q.filter(x=>x!==v):q.concat(v);
     state.quienes=q; render();
+  });
+  document.querySelectorAll("[data-tienda]").forEach(b=>b.onclick=()=>{
+    const v=b.dataset.tienda;
+    if(!v){state.tiendas=[]; render(); return;}
+    let q=state.tiendas||[];
+    q=q.includes(v)?q.filter(x=>x!==v):q.concat(v);
+    state.tiendas=q; render();
   });
   document.querySelectorAll(".job").forEach(el=>el.onclick=()=>openJob(el.dataset.id));
   document.querySelectorAll("[data-borrar]").forEach(b=>b.onclick=async ev=>{
