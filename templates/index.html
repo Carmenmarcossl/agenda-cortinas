@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#3d2b1f" />
+  <meta name="theme-color" content="#355347" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Cortinas" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="apple-touch-icon" href="/icon.png" />
   <title>Agenda Cortinas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,7 +26,8 @@
     .wrap{max-width:1080px;margin:0 auto;padding:16px 16px 110px}
     header.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 16px}
     .brand{display:flex;align-items:center;gap:10px}
-    .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(145deg,#d9783a,#8b3a16);display:grid;place-items:center;color:#fff;font-weight:700}
+    .logo{width:42px;height:42px;border-radius:12px;object-fit:cover;background:#355347}
+    .logo-wide{height:52px;width:auto;border-radius:8px;background:#355347}
     .brand small{display:block;color:var(--muted);font-family:"Source Sans 3",sans-serif;font-size:12px}
     .btn{display:inline-block;border:0;border-radius:14px;padding:12px 16px;cursor:pointer;font-weight:700;font-size:16px;text-decoration:none;text-align:center}
     a.btn{color:inherit}
@@ -210,7 +211,7 @@ function filtered(){
 function render(){
   if(!state.user){
     $("#app").innerHTML = `<div class="login-wrap"><div class="login-card card">
-      <div class="logo" style="width:52px;height:52px;font-size:22px">C</div>
+      <img class="logo-wide" src="/logo.png" alt="Carmen Marcos">
       <h1 style="margin:10px 0 6px">Agenda Cortinas</h1>
       <p class="hint" style="margin-top:0">Elige tu nombre y pon la contraseña.</p>
       <form id="loginForm">
@@ -238,7 +239,7 @@ function render(){
 
 function header(extra=""){
   const n=unread().length;
-  return `<header class="appbar"><div class="brand"><div class="logo">C</div><div><strong>Agenda Cortinas</strong><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
+  return `<header class="appbar"><div class="brand"><img class="logo" src="/icon.png" alt=""><div><strong>Agenda Cortinas</strong><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
     <div style="display:flex;gap:8px">${extra}
       <button class="btn btn-ghost bell" id="btnBell">🔔${n?`<span class="dot">${n}</span>`:""}</button>
       <button class="btn btn-ghost" id="btnSalir">Salir</button></div></header>`;
