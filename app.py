@@ -968,6 +968,13 @@ def api_listar():
     except Exception:
         pass
     user = current_user()
+    changed = False
+    for t in db["trabajos"]:
+        if t.get("estado") == "nueva" and (t.get("asignado_a") or "").strip():
+            t["estado"] = "asignada"
+            changed = True
+    if changed:
+        save_db(db)
     trabajos = db["trabajos"]
     if user["rol"] == "instalador":
         trabajos = [t for t in trabajos if t.get("asignado_a") == user["usuario"] and t.get("estado") != "nueva"]
