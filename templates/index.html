@@ -14,21 +14,23 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --ink:#2a1d14; --muted:#6d5a4b; --paper:#f6efe6; --card:#fffaf4;
-      --line:#e4d5c5; --terr:#c45c26; --sage:#4f6f5a; --danger:#b42318;
-      --shadow:0 10px 30px rgba(42,29,20,.08); --r:18px;
+      --ink:#24362e; --muted:#5d6f66; --paper:#eef3ef; --card:#fff;
+      --line:#d5e0d8; --terr:#ba8a5c; --sage:#355347; --danger:#b42318;
+      --shadow:0 10px 30px rgba(53,83,71,.08); --r:18px;
     }
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:"Source Sans 3",system-ui,sans-serif;background:radial-gradient(1200px 500px at 10% -10%,#f3d9b8 0%,transparent 55%),var(--paper);color:var(--ink);line-height:1.4}
+    body{font-family:"Source Sans 3",system-ui,sans-serif;background:radial-gradient(1200px 500px at 10% -10%,#d7e4dc 0%,transparent 55%),var(--paper);color:var(--ink);line-height:1.4}
     button,input,select,textarea{font-family:inherit}
     h1,h2,.brand strong{font-family:Fraunces,Georgia,serif}
-    a{color:#9a3f16}
+    a{color:#355347}
     .wrap{max-width:1080px;margin:0 auto;padding:16px 16px 110px}
-    header.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 16px}
-    .brand{display:flex;align-items:center;gap:10px}
-    .logo{width:42px;height:42px;border-radius:12px;object-fit:cover;background:#355347}
-    .logo-wide{height:52px;width:auto;border-radius:8px;background:#355347}
-    .brand small{display:block;color:var(--muted);font-family:"Source Sans 3",sans-serif;font-size:12px}
+    header.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin:0 0 14px;background:#355347;border-radius:16px;color:#fff}
+    .brand{display:flex;align-items:center;gap:10px;min-width:0}
+    .logo{width:42px;height:42px;border-radius:10px;object-fit:cover;background:#355347}
+    .logo-wide{height:58px;width:auto;max-width:min(70vw,420px);border-radius:8px;background:#355347;object-fit:contain}
+    .brand small{display:block;color:#d7e4dc;font-family:"Source Sans 3",sans-serif;font-size:12px}
+    .appbar .brand strong{color:#fff}
+    .appbar .btn-ghost{background:#fff;color:#24362e}
     .btn{display:inline-block;border:0;border-radius:14px;padding:12px 16px;cursor:pointer;font-weight:700;font-size:16px;text-decoration:none;text-align:center}
     a.btn{color:inherit}
     .btn-primary{background:var(--terr);color:#fff}
@@ -71,7 +73,7 @@
     .s-finalizada{background:#8a8178;color:#fff}
     .s-incidencia{background:#d94b2b;color:#fff}
     .s-facturado{background:#5b3fa8;color:#fff}
-    .fase{display:inline-block;font-size:12px;font-weight:800;color:#9a3f16;text-transform:uppercase;margin-right:6px}
+    .fase{display:inline-block;font-size:12px;font-weight:800;color:#355347;text-transform:uppercase;margin-right:6px}
     .empty{text-align:center;padding:40px 16px;color:var(--muted)}
     dialog{border:0;padding:0;background:transparent;max-width:640px;width:calc(100% - 18px)}
     dialog::backdrop{background:rgba(42,29,20,.45)}
@@ -95,7 +97,7 @@
     .pill{display:block;width:100%;text-align:left;border:0;border-radius:10px;padding:7px 8px;margin-bottom:6px;background:#f3e6d4;font-size:13px;cursor:pointer}
     .pill.inst{background:#e2eee6}
     .weekbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px}
-    .fab{position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:0;background:var(--terr);color:#fff;font-size:32px;box-shadow:0 10px 24px rgba(154,63,22,.35)}
+    .fab{position:fixed;right:18px;bottom:18px;width:62px;height:62px;border-radius:50%;border:0;background:#355347;color:#fff;font-size:32px;box-shadow:0 10px 24px rgba(53,83,71,.35)}
     .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 16px;border-radius:14px;z-index:50;max-width:92%}
     .ask-back{border:0;padding:0;max-width:none;width:100%;height:100%;background:transparent}
     .ask-back::backdrop{background:rgba(20,12,8,.55)}
@@ -239,7 +241,7 @@ function render(){
 
 function header(extra=""){
   const n=unread().length;
-  return `<header class="appbar"><div class="brand"><img class="logo" src="/icon.png" alt=""><div><strong>Agenda Cortinas</strong><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
+  return `<header class="appbar"><div class="brand"><img class="logo-wide" src="/logo.png" alt="Carmen Marcos"><div><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
     <div style="display:flex;gap:8px">${extra}
       <button class="btn btn-ghost bell" id="btnBell">🔔${n?`<span class="dot">${n}</span>`:""}</button>
       <button class="btn btn-ghost" id="btnSalir">Salir</button></div></header>`;
