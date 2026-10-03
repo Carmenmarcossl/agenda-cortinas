@@ -1028,6 +1028,8 @@ def api_crear():
                 return jsonify({"error": str(err)}), 400
     if inst and inst["rol"] == "instalador":
         asignar(trabajo, inst, user, db, "reparto" if trabajo["fase"]=="reparto" else ("toma de medidas" if trabajo["fase"] == "medidas" else "instalación"))
+    elif trabajo.get("fase") in ("medidas", "instalacion", "reparto"):
+        return jsonify({"error": "Elige el instalador antes de guardar"}), 400
     if trabajo.get("fase") != "reparto":
         guardar_cliente(db, trabajo.get("cliente"), trabajo.get("email"))
     db["trabajos"].append(trabajo)
