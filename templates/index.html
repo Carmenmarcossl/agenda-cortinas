@@ -259,7 +259,7 @@ function listaTiendas(){
 function chipsFiltro(){
   const inst=state.instaladores||[];
   const shops=listaTiendas();
-  return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["nueva","Sin enviar"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${(state.filtros||[]).includes(k)?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
+  return `<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todos","Todo"],["activos","En curso"],["asignada","Por citar"],["cita","Con cita"],["en_curso","Empezadas"],["incidencia","Incidencias"],["finalizada","Terminadas"],["facturado","Facturadas"]].map(([k,l])=>`<button class="chip ${(state.filtros||[]).includes(k)?"on":""}" data-f="${k}">${l}</button>`).join("")}</div></div>
     <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips">${[["todas","Todas"],["medidas","Medir"],["instalacion","Instalar"],["reparto","Reparto"]].map(([k,l])=>`<button class="chip ${(state.fases||[]).includes(k)?"on":""}" data-fase="${k}">${l}</button>`).join("")}</div></div>
     ${esInst()?"":`<div class="caja-filtros"><div class="tag">Filtros</div><div class="chips"><button class="chip ${!(state.quienes||[]).length?"on":""}" data-quien="">Todos</button>${inst.map(u=>`<button class="chip ${(state.quienes||[]).includes(u.usuario)?"on":""}" data-quien="${u.usuario}">${escapeHtml(u.nombre)}</button>`).join("")}</div></div>`}
     <div class="caja-filtros"><div class="tag">Filtros</div><div class="chips"><button class="chip ${!(state.tiendas||[]).length?"on":""}" data-tienda="">Todas las tiendas</button>${shops.map(n=>`<button class="chip ${(state.tiendas||[]).includes(n)?"on":""}" data-tienda="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join("")}</div></div>`;
@@ -416,7 +416,7 @@ function openNuevo(){
     <label>Foto o PDF</label>
     <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
     </div>
-    ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a">${instOptions()}</select>`}
+    ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a" id="selNuevoInst" required><option value="">Elegir instalador…</option>${(state.instaladores||[]).map(u=>`<option value="${u.usuario}">${escapeHtml(u.nombre)}</option>`).join("")}</select>`}
     <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
     <div class="error" id="errN"></div></form>`;
   dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
@@ -456,13 +456,17 @@ function openNuevo(){
       if(inC){ inC.focus(); inC.scrollIntoView({block:"center"}); }
       return;
     }
-    if(esRep){
-      const fd=new FormData(e.target);
-      if(!fd.get("cliente")) fd.set("cliente", nombre);
+    const quien=$("#selNuevoInst");
+    if(quien && !quien.value){
+      $("#errN").textContent="Elige a quién se lo mandas (Juan, José o Adrián).";
+      quien.focus();
+      return;
     }
+    const fd=new FormData(e.target);
+    if(esRep && !fd.get("cliente")) fd.set("cliente","Reparto");
     try{
       $("#errN").textContent="Guardando…";
-      await api("/api/trabajos",{method:"POST", form:true, body:new FormData(e.target)});
+      await api("/api/trabajos",{method:"POST", form:true, body:fd});
       dlg.close(); await load();
     }catch(err){$("#errN").textContent=err.message;}
   };
