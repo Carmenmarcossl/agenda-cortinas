@@ -24,10 +24,12 @@
     h1,h2,.brand strong{font-family:Fraunces,Georgia,serif}
     a{color:#355347}
     .wrap{max-width:1080px;margin:0 auto;padding:16px 16px 110px}
-    header.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin:0 0 14px;background:#355347;border-radius:16px;color:#fff}
+    header.appbar{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:12px;margin:0 0 14px;background:#355347;border-radius:16px;color:#fff}
     .brand{display:flex;align-items:center;gap:10px;min-width:0}
     .logo{width:42px;height:42px;border-radius:10px;object-fit:cover;background:#355347}
-    .logo-wide{height:58px;width:auto;max-width:min(70vw,420px);border-radius:8px;background:#355347;object-fit:contain}
+    .logo-wide{height:64px;width:100%;max-width:100%;border-radius:8px;background:#355347;object-fit:contain;object-position:left center}
+    .bar-acciones{display:flex;flex-wrap:wrap;gap:8px}
+    .bar-acciones .btn{flex:1;min-width:92px}
     .brand small{display:block;color:#d7e4dc;font-family:"Source Sans 3",sans-serif;font-size:12px}
     .appbar .brand strong{color:#fff}
     .appbar .btn-ghost{background:#fff;color:#24362e}
@@ -241,8 +243,8 @@ function render(){
 
 function header(extra=""){
   const n=unread().length;
-  return `<header class="appbar"><div class="brand"><img class="logo-wide" src="/logo.png" alt="Carmen Marcos"><div><small>Hola, ${escapeHtml(state.user.nombre)}</small></div></div>
-    <div style="display:flex;gap:8px">${extra}
+  return `<header class="appbar"><div class="brand"><img class="logo-wide" src="/logo.png" alt="Carmen Marcos"></div>
+    <div class="bar-acciones">${extra}
       <button class="btn btn-ghost bell" id="btnBell">🔔${n?`<span class="dot">${n}</span>`:""}</button>
       <button class="btn btn-ghost" id="btnSalir">Salir</button></div></header>`;
 }
@@ -317,7 +319,6 @@ function renderDueno(){
   const c={pend:0,cita:0,curso:0,fin:0};
   state.trabajos.forEach(t=>{ if(t.estado==="finalizada")c.fin++; else if(t.estado==="en_curso")c.curso++; else if(t.estado==="cita")c.cita++; else c.pend++; });
   $("#app").innerHTML=`${header(`<a class="btn btn-ghost" id="btnCopia" href="/api/copia">Copia</a><button class="btn btn-ghost" id="btnCli">Tiendas</button><button class="btn btn-ghost" id="btnEq">Instaladores</button>`)}
-    ${state.enlaces && state.enlaces.length ? `<div class="card" style="padding:12px 14px;margin-bottom:12px"><b>En el iPhone:</b> misma Wi‑Fi que el Mac y abre Safari en<br>${state.enlaces.map(e=>`<code style="font-size:16px">${e}</code>`).join("<br>")}<br><span class="meta">Luego: Compartir → Añadir a pantalla de inicio.</span></div>` : ""}
     <div class="stats">
       <div class="card stat"><b>${c.pend}</b><span>Por enviar / citar</span></div>
       <div class="card stat"><b>${c.cita}</b><span>Con cita</span></div>
