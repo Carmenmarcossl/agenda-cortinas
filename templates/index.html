@@ -612,6 +612,7 @@ function openJob(id){
   dlg.innerHTML=`<div class="sheet">
     <span class="fase">${FASES[t.fase]}</span>
     <h2 style="font-size:28px">${escapeHtml(t.cliente)}</h2>
+    ${t.fase==="medidas"?`<div class="bloque"><h3>Notas de la toma de medidas</h3><textarea id="notaMedidas" placeholder="Escribe aquí lo que haya que tener en cuenta" style="min-height:120px">${escapeHtml(t.notas||"")}</textarea><button class="btn btn-primary btn-xl" type="button" id="guardarNotaMedidas">Guardar nota</button></div>`:""}
     <div class="bloque">
       <h3>Tienda</h3>
       <p><b>${escapeHtml(t.cliente||"—")}</b></p>
@@ -628,7 +629,7 @@ function openJob(id){
     </div>
     ${simple?"":`${t.fase!=="reparto"?`<button class="btn btn-ghost btn-xl" type="button" id="cambiarFase">${t.fase==="instalacion"?"Esto es una TOMA DE MEDIDAS":"Esto es una INSTALACIÓN"}</button>`:""}
     <button class="btn btn-ghost btn-xl" type="button" id="editarDatos">Editar datos</button>
-    <div id="formDatos" hidden>
+    <div id="formDatos" ${t.fase==="medidas"?"":"hidden"}>
       <div class="bloque">
         <h3>Tienda</h3>
         <select id="selTiendaJob"><option value="">Elegir tienda…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}</option>`).join("")}</select>
@@ -640,8 +641,8 @@ function openJob(id){
         <h3>Cliente final</h3>
         <label>Nombre</label><input id="datoFinal" value="${escapeHtml(t.cliente_final||"")}">
         <div class="row"><div><label>Email</label><input id="datoEmailF" value="${escapeHtml(t.email_final||"")}"></div>
-        <div class="row"><div><label>Teléfono</label><input id="datoTelF" value="${escapeHtml(t.telefono_final||"")}"></div>
-        <div><label>Teléfono 2</label><input id="datoTelF2" value="${escapeHtml(t.telefono_final2||"")}"></div></div>
+        <div><label>Teléfono</label><input id="datoTelF" value="${escapeHtml(t.telefono_final||"")}"></div></div>
+        <label>Teléfono 2</label><input id="datoTelF2" value="${escapeHtml(t.telefono_final2||"")}">
         <label>Dirección</label><input id="datoDir" value="${escapeHtml(t.direccion||"")}">
         <div class="row"><div><label>Localidad</label><input id="datoLoc" value="${escapeHtml(t.localidad||"")}"></div>
         <div><label>Código postal</label><input id="datoCp" value="${escapeHtml(t.cp||"")}"></div></div>
@@ -650,7 +651,6 @@ function openJob(id){
       <div class="error" id="errDatos"></div>
     </div>`}
     <p style="font-size:22px;font-weight:800;margin:10px 0 14px;line-height:1.25">${escapeHtml(fmtCita(t))}</p>
-    ${t.fase==="medidas"?`<div class="bloque"><h3>Notas</h3><textarea id="notaMedidas" placeholder="Escribe aquí">${escapeHtml(t.notas||"")}</textarea><button class="btn btn-primary btn-xl" type="button" id="guardarNotaMedidas">Guardar nota</button></div>`:""}
     <div class="stack">
       ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar a la tienda</a>`:""}
       ${t.telefono_final?`<a class="btn btn-ghost btn-xl" href="tel:${escapeHtml(t.telefono_final)}">Llamar cliente final</a>`:""}
