@@ -297,6 +297,7 @@ def load_db() -> dict:
         t.setdefault("telefono2", "")
         t.setdefault("telefono_final", "")
         t.setdefault("telefono_final2", "")
+        t.setdefault("notas", "")
         t.setdefault("tareas", [])
         t.setdefault("rieles", "")
         t.setdefault("rieles_incidencia", "")
@@ -537,6 +538,7 @@ def nuevo_trabajo(user: dict, body: dict, fase: str = "medidas") -> dict:
         "tipo": (body.get("tipo") or "").strip(),
         "medidas": (body.get("medidas") or "").strip(),
         "notas_iniciales": (body.get("notas_iniciales") or "").strip(),
+        "notas": (body.get("notas") or "").strip(),
         "estado": "nueva",
         "cita_fecha": (body.get("cita_fecha") or "").strip(),
         "cita_hora": (body.get("cita_hora") or "").strip(),
@@ -1186,7 +1188,7 @@ def api_actualizar(trabajo_id: str):
         trabajo["fase"] = body["fase"]
         if anterior_fase != trabajo["fase"]:
             add_msg(trabajo, user, "Cambiado a " + ("reparto" if trabajo["fase"]=="reparto" else ("toma de medidas" if trabajo["fase"]=="medidas" else "instalación")) + ".")
-    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "rieles", "rieles_incidencia"):
+    for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "notas", "rieles", "rieles_incidencia"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
         elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles", "rieles_incidencia"):
