@@ -409,10 +409,15 @@ function openNuevo(){
       <h3>Cliente final</h3>
       <label>Nombre</label><input name="cliente_final" placeholder="Quién vive o atiende">
       <label>Email</label><input name="email_final" type="email" placeholder="correo@casa.com">
-      <label>Teléfono</label><input name="telefono_final" type="tel">
+      <label>Teléfono</label><input name="telefono_final" type="tel" placeholder="Primer teléfono">
+      <label>Teléfono 2</label><input name="telefono_final2" type="tel" placeholder="Segundo teléfono">
         <label>Dirección</label><input name="direccion" placeholder="Calle y número">
         <div class="row"><div><label>Localidad</label><input name="localidad" placeholder="Pueblo o ciudad"></div>
         <div><label>Código postal</label><input name="cp" placeholder="46000"></div></div>
+    </div>
+    <div id="cajaNotasMedidas">
+      <label>Notas de la toma de medidas</label>
+      <textarea name="notas" id="inNotasMedidas" placeholder="Lo que haya que tener en cuenta"></textarea>
     </div>
     </div>
     <div id="cajaArchivos">
@@ -436,7 +441,7 @@ function openNuevo(){
     const cn=$("#cajaNormal"); const cr=$("#cajaReparto");
     if(cn) cn.hidden=!!r; if(cr) cr.hidden=!r; const ca=$("#cajaArchivos"); if(ca) ca.hidden=!!r;
     const inC=$("#inCliente"); if(inC){ inC.required=!r; inC.disabled=!!r; }
-    const tit=$("#inRepartoFecha"); if(tit){ tit.disabled=!r; tit.required=!!r; }
+    const notas=$("#cajaNotasMedidas"); if(notas) notas.hidden=!(sf && sf.value==="medidas");
   };
   if(sf){ sf.onchange=syncFase; syncFase(); }
   const sel=$("#selCliente"); const inC=$("#inCliente"); const inE=$("#inEmail");
@@ -618,6 +623,7 @@ function openJob(id){
       <p><b>${escapeHtml(t.cliente_final||"—")}</b></p>
       ${t.email_final?`<p class="meta">${escapeHtml(t.email_final)}</p>`:""}
       ${t.telefono_final?`<p class="meta">${escapeHtml(t.telefono_final)}</p>`:""}
+      ${t.telefono_final2?`<p class="meta">${escapeHtml(t.telefono_final2)}</p>`:""}
       ${sitio?`<p class="meta">${escapeHtml(sitio)}</p>`:""}
     </div>
     ${simple?"":`${t.fase!=="reparto"?`<button class="btn btn-ghost btn-xl" type="button" id="cambiarFase">${t.fase==="instalacion"?"Esto es una TOMA DE MEDIDAS":"Esto es una INSTALACIÓN"}</button>`:""}
@@ -634,7 +640,8 @@ function openJob(id){
         <h3>Cliente final</h3>
         <label>Nombre</label><input id="datoFinal" value="${escapeHtml(t.cliente_final||"")}">
         <div class="row"><div><label>Email</label><input id="datoEmailF" value="${escapeHtml(t.email_final||"")}"></div>
-        <div><label>Teléfono</label><input id="datoTelF" value="${escapeHtml(t.telefono_final||"")}"></div></div>
+        <div class="row"><div><label>Teléfono</label><input id="datoTelF" value="${escapeHtml(t.telefono_final||"")}"></div>
+        <div><label>Teléfono 2</label><input id="datoTelF2" value="${escapeHtml(t.telefono_final2||"")}"></div></div>
         <label>Dirección</label><input id="datoDir" value="${escapeHtml(t.direccion||"")}">
         <div class="row"><div><label>Localidad</label><input id="datoLoc" value="${escapeHtml(t.localidad||"")}"></div>
         <div><label>Código postal</label><input id="datoCp" value="${escapeHtml(t.cp||"")}"></div></div>
@@ -643,9 +650,11 @@ function openJob(id){
       <div class="error" id="errDatos"></div>
     </div>`}
     <p style="font-size:22px;font-weight:800;margin:10px 0 14px;line-height:1.25">${escapeHtml(fmtCita(t))}</p>
+    ${t.fase==="medidas"?`<div class="bloque"><h3>Notas</h3><textarea id="notaMedidas" placeholder="Escribe aquí">${escapeHtml(t.notas||"")}</textarea><button class="btn btn-primary btn-xl" type="button" id="guardarNotaMedidas">Guardar nota</button></div>`:""}
     <div class="stack">
       ${t.telefono?`<a class="btn btn-sage btn-xl" href="tel:${escapeHtml(t.telefono)}">Llamar a la tienda</a>`:""}
       ${t.telefono_final?`<a class="btn btn-ghost btn-xl" href="tel:${escapeHtml(t.telefono_final)}">Llamar cliente final</a>`:""}
+      ${t.telefono_final2?`<a class="btn btn-ghost btn-xl" href="tel:${escapeHtml(t.telefono_final2)}">Llamar al segundo teléfono</a>`:""}
       ${maps?`<a class="btn btn-ghost btn-xl" href="${maps}" target="_blank" rel="noopener">Ver en el mapa</a>`:""}
     </div>
     ${!simple && t.estado!=="finalizada" && !t.asignado_a?`<label>Mandar a</label><select id="selInst">${instOptions("")}</select>
@@ -742,12 +751,14 @@ function openJob(id){
         cliente_final:($("#datoFinal").value||"").trim(),
         email_final:($("#datoEmailF").value||"").trim(),
         telefono_final:($("#datoTelF").value||"").trim(),
+        telefono_final2:($("#datoTelF2")&&$("#datoTelF2").value||"").trim(),
         direccion:($("#datoDir").value||"").trim(),
         localidad:($("#datoLoc").value||"").trim(),
         cp:($("#datoCp")&&$("#datoCp").value||"").trim()
       });
     }catch(err){ $("#errDatos").textContent=err.message; }
   };
+  const gnm=$("#guardarNotaMedidas"); if(gnm) gnm.onclick=()=>patch(t.id,{notas:($("#notaMedidas")&&$("#notaMedidas").value||"").trim()});
   const atj=$("#addTareaJob"); if(atj) atj.onclick=()=>{const ta=document.createElement("textarea"); ta.className="taTarea"; ta.placeholder="Otra nota…"; $("#listaTareasJob").appendChild(ta);};
   const gt=$("#guardarTareas"); if(gt) gt.onclick=()=>patch(t.id,{tareas:[...document.querySelectorAll(".taTarea")].map(x=>x.value.trim()).filter(Boolean)});
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
