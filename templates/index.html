@@ -586,7 +586,7 @@ function openAlertas(){
 
 function openJob(id){
   const t=state.trabajos.find(x=>x.id===id); if(!t) return; state.sel=id;
-  const dlg=$("#dlg"); const sitio=[t.direccion,t.cp,t.localidad].filter(Boolean).join(", "); const maps=sitio?`https://maps.google.com/?q=${encodeURIComponent(sitio)}`:"";
+  const dlg=$("#dlg"); const sitio=[t.direccion,t.cp,t.localidad].filter(Boolean).join(", "); const busca=sitio?sitio+", España":""; const maps=busca?`https://maps.apple.com/?address=${encodeURIComponent(busca)}`:"";
   const simple=esInst(); const fotos=t.fotos||[];
   if(t.fase==="reparto"){
     dlg.innerHTML=`<div class="sheet">
