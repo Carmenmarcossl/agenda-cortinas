@@ -1177,7 +1177,7 @@ def api_actualizar(trabajo_id: str):
     for field in ("cita_fecha", "cita_hora", "cita_nota", "cliente", "cliente_final", "email", "email2", "email_final", "email_final2", "telefono", "telefono2", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "tipo", "medidas", "notas", "rieles", "rieles_incidencia"):
         if field in body and user["rol"] == "dueno":
             trabajo[field] = (body.get(field) or "").strip()
-        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles", "rieles_incidencia"):
+        elif field in body and field in ("cita_fecha", "cita_hora", "cita_nota", "rieles", "rieles_incidencia", "notas", "telefono_final", "telefono_final2", "direccion", "localidad", "cp", "cliente_final"):
             trabajo[field] = (body.get(field) or "").strip()
     if "tareas" in body:
         trabajo["tareas"] = [str(x).strip() for x in (body.get("tareas") or []) if str(x).strip()]
