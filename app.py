@@ -1147,20 +1147,6 @@ def api_actualizar(trabajo_id: str):
                 add_msg(trabajo, user, "Correo al cliente: " + aviso)
             elif trabajo.get("email"):
                 add_msg(trabajo, user, "Terminado sin enviar correo.")
-            if trabajo.get("fase") == "medidas" and not trabajo.get("relacionado_id") and anterior != "incidencia":
-                inst_job = crear_instalacion_desde(trabajo, user)
-                trabajo["relacionado_id"] = inst_job["id"]
-                inst_job["relacionado_id"] = trabajo["id"]
-                db["trabajos"].append(inst_job)
-                instalacion_creada = inst_job
-                add_msg(trabajo, user, "Se ha creado la instalación de este cliente.")
-                add_alerta(
-                    db,
-                    para="dueno",
-                    texto=f"Medidas de {ficha_aviso(trabajo)} listas. Falta enviar la instalación.",
-                    trabajo_id=inst_job["id"],
-                    tipo="instalacion_lista",
-                )
 
     if body.get("enviar_correo"):
         fase_mail = "toma de medidas" if trabajo.get("fase") == "medidas" else "instalación"
