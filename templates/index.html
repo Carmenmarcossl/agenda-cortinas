@@ -923,7 +923,7 @@ async function patch(id,body){
   try{
     const res=await api("/api/trabajos/"+id,{method:"PATCH",body});
     await load();
-    if(res.instalacion_creada){toast("Medidas terminadas. Ya está creada la instalación."); openJob(res.instalacion_creada.id);}
+    if(res.trabajo){toast("Guardado."); if(state.sel===id) openJob(id);}
     else openJob(id);
   }catch(err){alert(err.message);}
 }
