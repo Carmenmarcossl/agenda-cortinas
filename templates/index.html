@@ -742,7 +742,8 @@ function openJob(id){
   if(gd) gd.onclick=async()=>{
     const nombre=($("#datoTienda")&&$("#datoTienda").value||"").trim();
     if(!nombre){ $("#errDatos").textContent="Falta el nombre de la tienda"; return; }
-    if(!confirm("¿Guardar los datos de esta ficha?")) return;
+    const ok=await preguntar("¿Guardar los datos de esta ficha?");
+    if(!ok) return;
     try{
       await patch(t.id,{
         cliente:nombre,
@@ -754,11 +755,16 @@ function openJob(id){
         telefono_final2:($("#datoTelF2")&&$("#datoTelF2").value||"").trim(),
         direccion:($("#datoDir").value||"").trim(),
         localidad:($("#datoLoc").value||"").trim(),
-        cp:($("#datoCp")&&$("#datoCp").value||"").trim()
+        cp:($("#datoCp")&&$("#datoCp").value||"").trim(),
+        notas:($("#notaMedidas")&&$("#notaMedidas").value||"").trim()
       });
     }catch(err){ $("#errDatos").textContent=err.message; }
   };
-  const gnm=$("#guardarNotaMedidas"); if(gnm) gnm.onclick=()=>patch(t.id,{notas:($("#notaMedidas")&&$("#notaMedidas").value||"").trim()});
+  const gnm=$("#guardarNotaMedidas"); if(gnm) gnm.onclick=async()=>{
+    const nota=($("#notaMedidas")&&$("#notaMedidas").value||"").trim();
+    try{ await patch(t.id,{notas:nota}); toast("Nota guardada."); }
+    catch(err){ alert(err.message); }
+  };
   const atj=$("#addTareaJob"); if(atj) atj.onclick=()=>{const ta=document.createElement("textarea"); ta.className="taTarea"; ta.placeholder="Otra nota…"; $("#listaTareasJob").appendChild(ta);};
   const gt=$("#guardarTareas"); if(gt) gt.onclick=()=>patch(t.id,{tareas:[...document.querySelectorAll(".taTarea")].map(x=>x.value.trim()).filter(Boolean)});
   const enviar=$("#enviar"); if(enviar) enviar.onclick=()=>patch(t.id,{asignado_a:$("#selInst").value});
