@@ -386,10 +386,10 @@ function instOptions(selected=""){
 
 function openNuevo(){
   const dlg=$("#dlg");
-  dlg.innerHTML=`<form class="sheet" id="formNuevo"><h2>Nuevo trabajo</h2>
+  dlg.innerHTML=`<form class="sheet" id="formNuevo" novalidate><h2>Nuevo trabajo</h2>
     <label>Qué hay que hacer</label><select name="fase" id="selFase"><option value="medidas">Toma de medidas</option><option value="instalacion">Instalación</option><option value="reparto">Reparto</option></select>
     <div id="cajaReparto" hidden>
-      <label>Día del reparto</label><input type="date" name="cita_fecha" id="inRepartoFecha" required>
+      <label>Día del reparto</label><input type="date" name="cita_fecha" id="inRepartoFecha">
       <label>Notas del reparto</label>
       <div id="listaTareas"><textarea name="tareas" placeholder="Ej. Ir a Navigator"></textarea></div>
       <button class="btn btn-ghost btn-xl" type="button" id="addTarea">Añadir otro recuadro</button>
@@ -401,7 +401,7 @@ function openNuevo(){
       <select id="selCliente"><option value="">Nueva tienda…</option>${(state.clientes||[]).map(c=>`<option value="${escapeHtml(c.id)}" data-nombre="${escapeHtml(c.nombre)}" data-email="${escapeHtml(c.email||"")}">${escapeHtml(c.nombre)}${c.email?" — "+escapeHtml(c.email):""}</option>`).join("")}</select>
       <div id="cajaNuevaTienda">
         <label>Nombre</label>
-        <input name="cliente" id="inCliente" required placeholder="Nombre de la tienda">
+        <input name="cliente" id="inCliente" placeholder="Nombre de la tienda">
         <label>Correo</label><input name="email" id="inEmail" type="email" placeholder="correo@tienda.com">
       </div>
     </div>
@@ -424,7 +424,7 @@ function openNuevo(){
     <label>Foto o PDF</label>
     <input type="file" name="archivos" accept="image/*,.pdf,application/pdf" multiple>
     </div>
-    ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a" id="selNuevoInst" required><option value="">Elegir instalador…</option>${(state.instaladores||[]).map(u=>`<option value="${u.usuario}">${escapeHtml(u.nombre)}</option>`).join("")}</select>`}
+    ${esInst()?"":`<label>Se lo mando a</label><select name="asignado_a" id="selNuevoInst"><option value="">Elegir instalador…</option>${(state.instaladores||[]).map(u=>`<option value="${u.usuario}">${escapeHtml(u.nombre)}</option>`).join("")}</select>`}
     <div class="actions"><button class="btn btn-primary" type="submit">Guardar</button><button class="btn btn-ghost" type="button" id="cancel">Cerrar</button></div>
     <div class="error" id="errN"></div></form>`;
   dlg.showModal(); $("#cancel").onclick=()=>dlg.close();
@@ -440,7 +440,8 @@ function openNuevo(){
     const r=sf && sf.value==="reparto";
     const cn=$("#cajaNormal"); const cr=$("#cajaReparto");
     if(cn) cn.hidden=!!r; if(cr) cr.hidden=!r; const ca=$("#cajaArchivos"); if(ca) ca.hidden=!!r;
-    const inC=$("#inCliente"); if(inC){ inC.required=!r; inC.disabled=!!r; }
+    const inC=$("#inCliente"); if(inC){ inC.disabled=!!r; }
+    const tit=$("#inRepartoFecha"); if(tit) tit.disabled=!r;
     const notas=$("#cajaNotasMedidas"); if(notas) notas.hidden=!(sf && sf.value==="medidas");
   };
   if(sf){ sf.onchange=syncFase; syncFase(); }
@@ -462,6 +463,10 @@ function openNuevo(){
     if(!esRep && !nombre){
       $("#errN").textContent="Falta el nombre de la tienda (arriba). El cliente final no sirve.";
       if(inC){ inC.focus(); inC.scrollIntoView({block:"center"}); }
+      return;
+    }
+    if(esRep && !($("#inRepartoFecha")&&$("#inRepartoFecha").value)){
+      $("#errN").textContent="Pon el día del reparto.";
       return;
     }
     const quien=$("#selNuevoInst");
